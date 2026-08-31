@@ -1,0 +1,48 @@
+{
+  "name": "dsh-websearch",
+  "version": "0.1.0",
+  "description": "Multi-engine web search for DeepSeek Harness: an aggregated ctx.web search provider (auto-routing + sequential fallback, free engines keep search alive) plus a web_search_pro model tool with per-query engine choice, fan-out, batch and verticals — Brave, Bocha, Zhipu, WSA, Bailian, Exa, Tavily, Serper, Bing, DuckDuckGo, AnySearch, Firecrawl, StackExchange, Hacker News, Semantic Scholar/arXiv, GitHub.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "deepseek-harness",
+    "web-search",
+    "search-provider"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "src/",
+    "cordis.patch.yml",
+    "docs/",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "author": "roc <roc@imroc.cc> (https://imroc.cc)",
+  "license": "MIT",
+  "homepage": "https://github.com/imroc/dsh-websearch#readme",
+  "repository": "github:imroc/dsh-websearch",
+  "bugs": "https://github.com/imroc/dsh-websearch/issues",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

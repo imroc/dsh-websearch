@@ -1,0 +1,19 @@
+# dsh-websearch bundle patch.
+#
+# 1. Mount the plugin (id `websearch`, package `dsh-websearch`).
+# 2. Pin the `web` seam's search provider to the aggregated provider this
+#    plugin registers (provider id `websearch`), so the built-in `web_search`
+#    tool routes through the multi-engine orchestrator instead of a single
+#    backend. `fetchProvider: http` restates the base-bundle value because a
+#    patch replaces the targeted row's whole `config` key.
+#
+# To disable the pin while keeping the plugin (e.g. to compare against another
+# provider), override the `web` row again in your $DSH_HOME/cordis.patch.yml
+# or the profile's cordis.patch.yml — later layers win.
+- insert:
+    - id: websearch
+      name: dsh-websearch
+- id: web
+  config:
+    searchProvider: websearch
+    fetchProvider: http
