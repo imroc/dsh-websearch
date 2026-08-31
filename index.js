@@ -219,15 +219,18 @@ export function apply(ctx, rawConfig) {
   // Settings section: composition config as base, ~/.dsh/settings.yaml user
   // layer (and the Plugins card) on top; changes hot-apply — `disable` is
   // read live and keys re-resolve on every change.
+  //
+  // Uses the plain service API (register + scope.get/watch) shared by
+  // 0.1.1-rc.2 and master: the rc.2-only `installSettingsSection` helper and
+  // the master-only `settings.installSection` method are both thin wrappers
+  // over exactly this call.
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.installSection(ctx, SETTINGS_NAMESPACE, Config, getConfig(), {
-      setSource: (source) => {
-        getConfig = () => normalizeConfig(source())
-      },
-      onChange: () => {
-        void refreshKeys()
-      },
+    const scope = settingsCtx.settings.register(SETTINGS_NAMESPACE, Config, { base: getConfig() })
+    getConfig = () => normalizeConfig(scope.get())
+    scope.watch(() => {
+      void refreshKeys()
     })
+    void refreshKeys()
   })
 
   // 1) Aggregated provider behind the official web_search tool.

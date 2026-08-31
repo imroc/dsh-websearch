@@ -17,7 +17,10 @@ import { createElement, useState } from 'react'
 
 export const name = 'dsh-websearch-client'
 
-export const inject = ['slots', 'settingsScope', 'remote', 'remote.credentials']
+// Service names that exist in BOTH 0.1.1-rc.2 and master. Note
+// `remote.credentials` is its own injectable service only on master; on rc.2
+// it is a plain sub-object of `remote` — resolved defensively in apply().
+export const inject = ['slots', 'remote', 'settingsScope']
 
 const NS = 'dsh-websearch'
 
@@ -57,6 +60,10 @@ function createStore(initial) {
 
 export function apply(ctx) {
   const scope = ctx.settingsScope.bind({ namespace: NS })
+  // rc.2: remote.credentials is a sub-object of the remote service; master:
+  // an injectable service of its own (ctx.get reads it without declaring a
+  // hard dependency, so both releases resolve here).
+  const credentials = ctx.get('remote.credentials') ?? ctx.remote.credentials
   const store = createStore({
     loaded: false,
     engines: ENGINES.map((e) => ({ ...e, configured: false, writable: true })),
@@ -76,14 +83,48 @@ export function apply(ctx) {
     })
   }
 
+  // The credentials remote changed shape between releases:
+  //   0.1.1-rc.2: describe({refs}) → {result: {ok, value: {credentials: {ref: info}}}}, set({ref, value})
+  //   master:     describe(refs)  → {ok, value: {ref: info}},                          set(ref, value)
+  // Probe both arg shapes and normalize the envelope; remember which one
+  // answered so writes use the matching shape.
+  let credentialsShape = null
+
+  async function describeCredentials(refs) {
+    for (const arg of [{ refs }, refs]) {
+      try {
+        const response = await credentials.describe(arg)
+        const result = response?.result
+        if (result !== undefined) {
+          credentialsShape = arg === refs ? 'positional' : 'object'
+          return result.ok === true ? result.value?.credentials ?? {} : {}
+        }
+        if (response?.ok !== undefined) {
+          credentialsShape = arg === refs ? 'positional' : 'object'
+          return response.ok === true ? response.value ?? {} : {}
+        }
+      } catch { /* try the other arg shape */ }
+    }
+    return {}
+  }
+
+  async function setCredential(ref, value) {
+    if (credentialsShape !== 'positional') {
+      try {
+        await credentials.set({ ref, value })
+        return
+      } catch { /* fall through to the positional shape */ }
+    }
+    await credentials.set(ref, value)
+  }
+
   async function readCredentials() {
     const refs = ENGINES.map((e) => e.ref)
-    let view = {}
-    try {
-      const response = await ctx.remote.credentials.describe(refs)
-      if (response.ok) view = response.value ?? {}
-    } catch {
-      return // keep the last answer; a later invalidation re-reads
+    const view = await describeCredentials(refs)
+    if (Object.keys(view).length === 0 && !store.getSnapshot().loaded) {
+      // Nothing answered yet — keep the loading state; a later invalidation
+      // (or scope change) re-reads.
+      return
     }
     store.set({
       ...store.getSnapshot(),
@@ -106,7 +147,7 @@ export function apply(ctx) {
   }), 'dsh-websearch: credential invalidations')
 
   async function setKey(ref, value) {
-    await ctx.remote.credentials.set(ref, value)
+    await setCredential(ref, value)
     await readCredentials()
   }
 
