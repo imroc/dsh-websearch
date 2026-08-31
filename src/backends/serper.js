@@ -22,12 +22,13 @@ export function create({ keys }) {
     available: () => Boolean(keys.serper),
     async search(req, signal) {
       const news = req.topic === 'news'
+      const tbs = freshnessTbs(req.freshness)
       const body = {
         q: applySiteOperators(req.query, req.includeSites, req.excludeSites),
         num: clamp(req.maxResults ?? 10, 1, 20),
         ...(req.language !== undefined ? { hl: req.language } : {}),
         ...(req.region !== undefined ? { gl: req.region } : {}),
-        ...(freshnessTbs(req.freshness) !== undefined ? { tbs: freshnessTbs(req.freshness) } : {}),
+        ...(tbs !== undefined ? { tbs } : {}),
       }
       const data = await fetchJson('serper', `${BASE}/${news ? 'news' : 'search'}`, {
         method: 'POST',

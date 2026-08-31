@@ -15,9 +15,12 @@ export class BackendError extends Error {
 }
 
 /** Combine an outer signal and a timeout into one controller (Node 18 compatible). */
-function withTimeout(engine, signal, timeoutMs) {
+function withTimeout(engine, signal, timeoutMs, onTimeout) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(new BackendError(engine, `timeout after ${timeoutMs}ms`)), timeoutMs)
+  const timer = setTimeout(() => {
+    if (onTimeout !== undefined) onTimeout()
+    controller.abort(new BackendError(engine, `timeout after ${timeoutMs}ms`))
+  }, timeoutMs)
   const onOuterAbort = () => controller.abort(signal.reason)
   if (signal !== undefined) {
     if (signal.aborted) onOuterAbort()
@@ -50,7 +53,8 @@ function messageFromBody(body) {
 
 async function fetchWithRetry(engine, url, { method = 'GET', headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS, signal, retries = 1 } = {}) {
   for (let attempt = 0; ; attempt++) {
-    const { signal: combined, clear } = withTimeout(engine, signal, timeoutMs)
+    let timedOut = false
+    const { signal: combined, clear } = withTimeout(engine, signal, timeoutMs, () => { timedOut = true })
     try {
       const res = await fetch(url, { method, headers, body, signal: combined })
       if (res.ok) {
@@ -60,19 +64,32 @@ async function fetchWithRetry(engine, url, { method = 'GET', headers = {}, body,
       }
       const bodyText = await res.text().catch(() => '')
       clear()
-      const retryable = res.status === 429 || res.status === 408 || res.status >= 500
+      const message = messageFromBody(bodyText)
+      const retryAfter = res.headers.get('retry-after')
+      // A Retry-After header marks a retryable condition even outside
+      // 429/408/5xx — e.g. GitHub search rate limits answer 403 + Retry-After.
+      const retryable = res.status === 429 || res.status === 408 || res.status >= 500 || (retryAfter !== null && retryAfter !== '')
       if (retryable && attempt < retries) {
-        const ra = Number(res.headers.get('retry-after'))
+        const ra = Number(retryAfter)
         await sleep(Number.isFinite(ra) && ra > 0 && ra < 30 ? ra * 1000 : 700 * (attempt + 1))
         continue
       }
-      throw new BackendError(engine, `HTTP ${res.status}${messageFromBody(bodyText) !== undefined ? `: ${messageFromBody(bodyText)}` : ''}`, { status: res.status, retryable })
+      throw new BackendError(engine, `HTTP ${res.status}${message !== undefined ? `: ${message}` : ''}`, { status: res.status, retryable })
     } catch (e) {
       clear()
-      if (e instanceof BackendError) throw e
-      if (e?.name === 'AbortError') {
-        throw signal?.aborted ? e : new BackendError(engine, 'request timed out', { retryable: true })
+      // A timeout is the most common transient failure for slow engines
+      // (bailian/zhipu regularly answer in 4–7s) — retry it like 429/5xx.
+      if (timedOut) {
+        if (attempt < retries) {
+          await sleep(700 * (attempt + 1))
+          continue
+        }
+        throw new BackendError(engine, `request timed out after ${timeoutMs}ms`, { retryable: true })
       }
+      if (e instanceof BackendError) throw e
+      // An externally aborted signal is never retried or wrapped — propagate
+      // the original abort so cancellation stays cancellation.
+      if (signal?.aborted) throw e
       if (attempt < retries) {
         await sleep(700 * (attempt + 1))
         continue

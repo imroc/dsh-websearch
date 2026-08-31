@@ -20,28 +20,30 @@ function tokenFromGhHosts() {
   }
 }
 
-function toIsoDateOr(value) {
-  return toIsoDate(value)
-}
-
 export function create({ keys, env }) {
-  const hostsToken = tokenFromGhHosts()
-  const currentToken = () => keys.gh ?? env.GITHUB_TOKEN ?? env.GH_TOKEN ?? hostsToken
+  // hosts.yml is re-read per call (not snapshotted) so a token change (gh
+  // auth login) applies without a restart, matching the live keys map.
+  const currentToken = () => keys.gh ?? env.GITHUB_TOKEN ?? env.GH_TOKEN ?? tokenFromGhHosts()
   return {
     id: 'gh',
     available: () => true,
     async search(req, signal) {
       const token = currentToken()
-      const headers = {
-        accept: 'application/vnd.github+json',
-        'x-github-api-version': '2022-11-28',
-        ...(token !== undefined ? { authorization: `Bearer ${token}` } : {}),
-      }
       const kind = req.extra?.kind ?? 'repos'
       const endpoints = { repos: '/search/repositories', issues: '/search/issues', prs: '/search/issues', code: '/search/code' }
       const endpoint = endpoints[kind]
       if (endpoint === undefined) {
         throw new BackendError('gh', `extra.kind must be one of ${Object.keys(endpoints).join('|')}`)
+      }
+      if (kind === 'code' && token === undefined) {
+        // GitHub rejects anonymous code search with a bare 401 — fail early
+        // with an actionable message instead.
+        throw new BackendError('gh', 'code search requires a token (GITHUB_TOKEN, or gh CLI login) — GitHub rejects anonymous code search')
+      }
+      const headers = {
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+        ...(token !== undefined ? { authorization: `Bearer ${token}` } : {}),
       }
       let q = req.query
       if (kind === 'issues') q += ' is:issue'
@@ -60,7 +62,7 @@ export function create({ keys, env }) {
             url: it.html_url,
             title: it.full_name,
             snippet: `${it.stargazers_count ?? 0} stars${it.language !== undefined ? ` · ${it.language}` : ''}${it.description !== undefined ? ` · ${it.description}` : ''}`,
-            ...(toIsoDateOr(it.pushed_at) !== undefined ? { publishedAt: toIsoDateOr(it.pushed_at) } : {}),
+            ...(toIsoDate(it.pushed_at) !== undefined ? { publishedAt: toIsoDate(it.pushed_at) } : {}),
           }
         }
         if (kind === 'code') {
@@ -72,7 +74,7 @@ export function create({ keys, env }) {
           url: it.html_url,
           title: it.title,
           snippet: `${it.state ?? ''}${it.comments !== undefined ? ` · ${it.comments} comments` : ''}${repo !== undefined ? ` · ${repo}` : ''}`,
-          ...(toIsoDateOr(it.updated_at) !== undefined ? { publishedAt: toIsoDateOr(it.updated_at) } : {}),
+          ...(toIsoDate(it.updated_at) !== undefined ? { publishedAt: toIsoDate(it.updated_at) } : {}),
         }
       })
       return { sources }

@@ -2,8 +2,8 @@
 // of every fallback chain. Parses the html.duckduckgo.com result anchors and
 // resolves the uddg= redirect wrappers (approach validated by community plugins).
 
-import { fetchText } from '../core/http.js'
-import { decodeHtmlEntities, stripHtml } from '../core/util.js'
+import { BackendError, fetchText } from '../core/http.js'
+import { stripHtml } from '../core/util.js'
 
 const ENDPOINT = 'https://html.duckduckgo.com/html/'
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
@@ -24,37 +24,55 @@ function resolveHref(href) {
   }
 }
 
+/** Attribute value of an anchor tag, independent of attribute order. */
+function attr(attrs, name) {
+  const m = new RegExp(`${name}="([^"]*)"`).exec(attrs)
+  return m === null ? undefined : m[1]
+}
+
 export function create() {
   return {
     id: 'ddg',
     available: () => true,
     async search(req, signal) {
       const params = new URLSearchParams({ q: req.query })
-      if (typeof req.region === 'string' && req.region !== '') params.set('kl', req.region)
+      // kl takes a full 'cc-ll' market form (us-en, wt-wt…); a bare country
+      // code is ignored, so combine with the language hint.
+      if (typeof req.region === 'string' && req.region !== '') {
+        params.set('kl', /^[a-z]{2}-[a-z]{2}$/i.test(req.region) ? req.region : `${req.region}-${req.language ?? 'en'}`)
+      }
       const html = await fetchText('ddg', ENDPOINT, {
         method: 'POST',
         headers: { 'user-agent': UA, 'content-type': 'application/x-www-form-urlencoded', accept: 'text/html' },
         body: params.toString(),
         signal,
       })
+      // A challenge/consent/structure-changed page carries none of DDG's
+      // result markers — that is an error, not "no results" (it would
+      // otherwise silently poison every fallback chain that ends here).
+      if (!/result__(a|snippet)/.test(html)) {
+        throw new BackendError('ddg', 'unrecognized response (rate limited or page structure changed)')
+      }
       const limit = req.maxResults ?? 10
       const sources = []
       const seen = new Set()
-      const anchorRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g
-      for (let m = anchorRe.exec(html); m !== null && sources.length < limit; m = anchorRe.exec(html)) {
-        const url = resolveHref(m[1])
-        if (!url.startsWith('http') || seen.has(url)) continue
-        seen.add(url)
-        const title = stripHtml(m[2])
-        sources.push({ url, ...(title !== undefined ? { title } : {}) })
-      }
-      // Attach snippets by ordinal position of result blocks.
-      const snippetRe = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g
-      let i = 0
-      for (let m = snippetRe.exec(html); m !== null && i < sources.length; m = snippetRe.exec(html)) {
-        const snippet = stripHtml(m[1])
-        if (snippet !== undefined) sources[i].snippet = snippet.slice(0, 300)
-        i++
+      // Pair each result anchor with the snippet that FOLLOWS it (before the
+      // next result anchor). Ordinal-index pairing mis-assigns snippets as
+      // soon as any anchor is filtered out (ads, duplicate URLs).
+      let last = null
+      for (const m of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
+        const cls = attr(m[1], 'class') ?? ''
+        if (/\bresult__a\b/.test(cls)) {
+          const url = resolveHref(attr(m[1], 'href') ?? '')
+          if (!url.startsWith('http') || seen.has(url)) { last = null; continue }
+          seen.add(url)
+          const title = stripHtml(m[2])
+          last = { url, ...(title !== undefined ? { title } : {}) }
+          if (sources.length < limit) sources.push(last)
+        } else if (/\bresult__snippet\b/.test(cls) && last !== null && last.snippet === undefined) {
+          const snippet = stripHtml(m[2])
+          if (snippet !== undefined) last.snippet = snippet.slice(0, 300)
+        }
       }
       return { sources }
     },

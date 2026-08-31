@@ -1,7 +1,7 @@
 // Hacker News via the Algolia API — free, no key. Tech community discussion
 // and sentiment. Ported from the skill's `hn` script.
 
-import { fetchJson, qs } from '../core/http.js'
+import { BackendError, fetchJson, qs } from '../core/http.js'
 import { clamp, toIsoDate } from '../core/util.js'
 
 const BASE = 'https://hn.algolia.com/api/v1'
@@ -13,8 +13,13 @@ export function create() {
     async search(req, signal) {
       const byDate = req.extra?.sort === 'date'
       const params = { query: req.query, hitsPerPage: clamp(req.maxResults ?? 10, 1, 50) }
-      if (req.extra?.type === 'story' || req.extra?.type === undefined) params.tags = 'story'
+      if (req.extra?.type === undefined || req.extra?.type === 'story') params.tags = 'story'
       else if (req.extra?.type === 'comment') params.tags = 'comment'
+      else {
+        // Silently ignoring an unsupported type would run the search WITHOUT
+        // the filter the caller asked for — reject loudly instead.
+        throw new BackendError('hn', `extra.type must be 'story' or 'comment' (got '${req.extra.type}')`)
+      }
       const days = Number(req.extra?.days)
       if (Number.isFinite(days) && days > 0) {
         params.numericFilters = `created_at_i>${Math.floor(Date.now() / 1000) - Math.trunc(days) * 86400}`

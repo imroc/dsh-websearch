@@ -13,7 +13,7 @@ export function create() {
     async search(req, signal) {
       const params = {
         order: 'desc',
-        sort: ['relevance', 'votes', 'creation'].includes(req.extra?.sort) ? req.extra.sort : 'relevance',
+        sort: ['relevance', 'votes', 'creation', 'activity'].includes(req.extra?.sort) ? req.extra.sort : 'relevance',
         q: req.query,
         site: typeof req.extra?.site === 'string' ? req.extra.site : 'stackoverflow',
         pagesize: clamp(req.maxResults ?? 5, 1, 30),
@@ -33,7 +33,8 @@ export function create() {
           snippet: `score ${it.score} · ${it.answer_count} answers${it.is_answered ? ' · accepted answer' : ''}${Array.isArray(it.tags) && it.tags.length > 0 ? ` · [${it.tags.join(',')}]` : ''}`,
           ...(toIsoDate(it.creation_date) !== undefined ? { publishedAt: toIsoDate(it.creation_date) } : {}),
         })),
-        truncated: typeof data?.quota_remaining === 'number' && data.quota_remaining < 50,
+        // `truncated` stays reserved for actual result truncation — a low API
+        // quota is not "truncated" and would pollute merged fan-out results.
       }
     },
   }

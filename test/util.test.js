@@ -30,7 +30,8 @@ test('freshness vocabulary mapping', () => {
   assert.equal(freshnessBrave('day'), 'pd')
   assert.equal(freshnessBrave('2026-01-01to2026-02-01'), '2026-01-01to2026-02-01')
   assert.equal(freshnessTbs('month'), 'qdr:m')
-  assert.equal(freshnessTbs('2026-01-01to2026-02-01'), 'qdr:c:2026-01-01..2026-02-01')
+  // Custom ranges use Google's cdr vocabulary (qdr:c:from..to is ignored).
+  assert.equal(freshnessTbs('2026-01-01to2026-02-01'), 'cdr:1,cd_min:01/01/2026,cd_max:02/01/2026')
 })
 
 test('freshnessStartISO returns a date string', () => {

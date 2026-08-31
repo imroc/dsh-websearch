@@ -29,10 +29,12 @@ DSH 内置 `web_search` 每次只走一个 provider（默认 `deepseek-official`
 | `firecrawl` | Firecrawl search | `FIRECRAWL_API_KEY` | — | web/新闻 |
 | `stack` | StackExchange | — | ✓ | 编程问答 |
 | `hn` | Hacker News（Algolia） | — | ✓ | 技术社区讨论 |
-| `academic` | Semantic Scholar / arXiv | `S2_API_KEY`（可选） | ✓ | 论文（`extra.provider`） |
-| `gh` | GitHub Search | `GITHUB_TOKEN` / `GH_TOKEN` / gh CLI token（可选） | ✓ | 仓库/issue/PR/代码 |
+| `academic` | Semantic Scholar / arXiv | `S2_API_KEY`（可选） | ✓ | 论文（`extra.provider`；`extra.year` 对两家都生效，起始年语义） |
+| `gh` | GitHub Search | `GITHUB_TOKEN` / `GH_TOKEN` / gh CLI token（可选） | ✓ | 仓库/issue/PR/代码（code search 必须有 token） |
 
-key 解析顺序：`config.keys.<id>`（字面量）→ 环境变量 → 引擎不可用。缺 key 永不崩溃：该引擎自动退出所有路由链。
+key 解析顺序：`config.keys.<id>`（字面量）→ credentials 服务（其内部层叠：env > `~/.dsh/.credentials.yaml` > `.env`）→ 环境变量。缺 key 永不崩溃：该引擎自动退出所有路由链。
+
+> 时效（freshness）说明：`YYYY-MM-DDtoYYYY-MM-DD` 区间格式在 brave（原生）、exa（起始日期）、wsa（FromTime/ToTime）与 Google 系引擎（serper/firecrawl，经 `tbs` 的 `cdr`）上完整生效；tavily 会把任意区间放宽为「过去一年」，bocha/zhipu 直接丢弃过滤——这几家 API 没有自定义区间词汇。
 
 ## 安装
 
@@ -62,7 +64,7 @@ dsh plugin --profile web add /path/to/dsh-websearch
 
 > **env 会遮蔽 UI 存储**：credentials 层叠为 `进程环境变量 > ~/.dsh/.credentials.yaml > .env`。若 dsh-web 进程继承了这个 key 的环境变量，UI 里保存的值不会生效，直到该变量从服务环境中移除（卡片会把这类引擎标为「env 提供」并禁用输入框）。
 
-插件卡片还提供每引擎的启用/禁用复选框——即 `dsh-websearch` settings section 的 `disable` 数组，热生效。同样的字段也可以直接编辑 `~/.dsh/settings.yaml`：
+插件卡片还提供每引擎的启用/禁用复选框（16 个引擎全有，含免 key 引擎）——即 `dsh-websearch` settings section 的 `disable` 数组，热生效。同样的字段也可以直接编辑 `~/.dsh/settings.yaml`：
 
 ```yaml
 dsh-websearch:
@@ -101,7 +103,7 @@ extra:        引擎特定选项，例如：
 ## 开发
 
 ```bash
-npm test                     # 41 个单测（无网络）
+npm test                     # 66 个单测（无网络）
 node scripts/smoke.mjs       # 每个后端一条真实查询
 ```
 

@@ -1,6 +1,8 @@
 # dsh-websearch — 设计定稿
 
-日期：2026-09-06 · 状态：v0.2.3 · 适用：DSH 0.1.1-rc.2 装机实测（源码 master `0a53fb5` 仅作对照，API 有差异见 §8）
+日期：2026-09-06 · 状态：v0.2.4 · 适用：DSH 0.1.1-rc.2 装机实测（源码 master `0a53fb5` 仅作对照，API 有差异见 §8）
+
+> **v0.2.4 增量（2026-08-31 全量验证 + 评审修复）**：全量实测发现两处**上游 API 漂移**并修复其影响——① zhipu 响应的 `link` 字段对时效/新闻类查询全空（技术类查询正常，实测对照；router 过滤后恒 0 条）→ adapter 在全部条目无 link 时 throw 触发降级 + count 客户端截断（API 忽略 count，3 要 47 回）；② brave News 端点 `results` 在顶层无 `news` 包装（官方 API Reference 确认）→ 解析改 `data?.results`。评审修复：arXiv 多词查询加引号（不加引号被 OR 展开，60 万条无关命中）、Google tbs 日期区间改 `cdr:1,cd_min:…,cd_max:…`（`qdr:c:from..to` 是非法词汇被静默忽略）、bing/ddg 格式异常从静默空结果改为 BackendError、ddg snippet 按邻近配对（原按序号配对会错位）+ 属性顺序无关解析、exa findSimilar 补 freshness/sites、http.js 超时可重试 + 外部 abort 不重试不包装、fanOutQuery 取消传播、stack 删除 `truncated` 挪用（配额告警污染合并结果）、arXiv `extra.year` 实现（submittedDate 区间，与 S2 同为起始年语义）、bing mkt 区域映射表 + ddg kl 全形态、gh 补 `keyEnv`（卡片可管理 token）+ 匿名 code search 提前报错、卡片补 4 个免 key 引擎开关 + toggleEngine 容错 + ENGINES 表与 engines.js 一致性单测。66 单测全绿。
 
 > **v0.2.x 增量（密钥配置 UI 化 + rc.2 兼容）**：宿主侧注册 settings section（namespace `dsh-websearch`，schema `{disable: string[], keys: dict(secret)}`）+ key 走 `credentials.resolve(credentialRef(refName))` 惰性解析（层叠：字面量 config > credentials 服务[内部 env > .credentials.yaml > .env] > process env）；`credentials/reference-updated` 事件与 settings scope watch 触发 refreshKeys，写入 live keys map（后端每次调用现读，热生效）。浏览器半边 `client.js`（`dsh.client.platform: web` + `exports["./client"]`）在 `settings.plugin.item` keyed slot（key=namespace）注册卡片：credentials remote 管密钥（明文永不上行回显）、settings scope 管 disable 复选框。**关键告警：进程 env 遮蔽 UI 存储**——credentials 层叠 env 优先，服务进程 env 已有的同名 key 会遮蔽 UI 写入值（卡片对 writable=false 的引擎标注「env 提供」并禁用输入）。
 
@@ -85,8 +87,8 @@ web_search_pro 工具 ──▶│  聚合 provider id=websearch                
 | firecrawl | Firecrawl search | api.firecrawl.dev/v2/search | FIRECRAWL_API_KEY | ✗ | web/news | freshness(tbs), news(sources) |
 | stack | StackExchange | api.stackexchange.com/2.3/search/advanced | — | ✓ | 编程问答 | extra.site/tagged/sort/answered |
 | hn | Hacker News(Algolia) | hn.algolia.com/api/v1/{search,search_by_date} | — | ✓ | 技术社区 | extra.type/sort/days |
-| academic | S2 + arXiv | api.semanticscholar.org / export.arxiv.org | — | ✓ | 学术 | extra.provider=s2/arxiv, year, field |
-| gh | GitHub Search | api.github.com/search/{repositories,issues,code} | GITHUB_TOKEN/GH_TOKEN 或 gh hosts.yml（可选） | ✓ | 代码/仓库 | extra.kind/sort；限定符直接写进 query |
+| academic | S2 + arXiv | api.semanticscholar.org / export.arxiv.org | — | ✓ | 学术 | extra.provider=s2/arxiv, year(两家生效,起始年), field；arXiv 多词必须加引号防 OR 展开 |
+| gh | GitHub Search | api.github.com/search/{repositories,issues,code} | GITHUB_TOKEN/GH_TOKEN 或 gh hosts.yml（可选） | ✓ | 代码/仓库 | extra.kind/sort；限定符直接写进 query；code search 必须有 token |
 
 ## 4. 路由与降级语义
 

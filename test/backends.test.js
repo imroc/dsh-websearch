@@ -56,6 +56,28 @@ test('zhipu maps freshness and include sites', async () => {
   })
 })
 
+test('zhipu truncates client-side (the API ignores count)', async () => {
+  const { create } = await import('../src/backends/zhipu.js')
+  // Live 2026-08-31: count=3 requested, 47 items returned.
+  const many = Array.from({ length: 47 }, (_, i) => ({ title: `t${i}`, link: `https://z.com/${i}`, content: 'c' }))
+  installFetch(() => ({ status: 200, body: JSON.stringify({ search_result: many }) }))
+  const b = create({ keys: { zhipu: 'k' } })
+  const res = await b.search({ query: 'q', maxResults: 3 }, undefined)
+  assert.equal(res.sources.length, 3)
+})
+
+test('zhipu throws when every item lacks a link (upstream shape change)', async () => {
+  const { create } = await import('../src/backends/zhipu.js')
+  // Live 2026-08-31: the API started returning an empty link field — every
+  // result would be dropped downstream; surface it as a hard error instead.
+  installFetch(() => ({
+    status: 200,
+    body: JSON.stringify({ search_result: [{ title: 't', link: '', content: 'c', publish_date: '2026-08-13' }] }),
+  }))
+  const b = create({ keys: { zhipu: 'k' } })
+  await assert.rejects(() => b.search({ query: 'q' }, undefined), /without links/)
+})
+
 test('zhipu surfaces API error envelopes', async () => {
   const { create } = await import('../src/backends/zhipu.js')
   installFetch(() => ({ status: 200, body: JSON.stringify({ error: { code: 1002, message: 'bad key' } }) }))
@@ -116,6 +138,21 @@ test('brave builds web/news URLs with freshness and site_filter', async () => {
   assert.equal(calls[0].init.headers['x-subscription-token'], 'k')
 })
 
+test('brave news parses the top-level results array (no news wrapper)', async () => {
+  const { create } = await import('../src/backends/brave.js')
+  // Live shape verified 2026-08-31: the News endpoint answers
+  // {"type":"news","query":{...},"results":[...]} — results at the TOP level.
+  installFetch(() => ({
+    status: 200,
+    body: JSON.stringify({ type: 'news', query: { original: 'q' }, results: [{ type: 'news_result', title: 't', url: 'https://n.com', description: 'd', age: '2 days ago' }] }),
+  }))
+  const b = create({ keys: { brave: 'k' } })
+  const res = await b.search({ query: 'q', topic: 'news', freshness: 'week' }, undefined)
+  assert.ok(calls[0].url.startsWith('https://api.search.brave.com/res/v1/news/search?'))
+  assert.equal(res.sources.length, 1)
+  assert.equal(res.sources[0].url, 'https://n.com')
+})
+
 test('bing parses RSS items and resolves pubDate', async () => {
   const { create } = await import('../src/backends/bing.js')
   const rss = '<?xml version="1.0"?><rss><channel>' +
@@ -131,6 +168,29 @@ test('bing parses RSS items and resolves pubDate', async () => {
   assert.ok(calls[0].url.includes('format=rss'))
 })
 
+test('bing maps region/language to a market and accepts attributed <item> tags', async () => {
+  const { create } = await import('../src/backends/bing.js')
+  const rss = '<rss><channel><item rdf:about="x"><title>T</title><link>https://b.com/9</link></item></channel></rss>'
+  installFetch(() => ({ status: 200, body: rss }))
+  const b = create()
+  await b.search({ query: 'q', region: 'jp' }, undefined)
+  assert.ok(calls[0].url.includes('mkt=ja-JP'))
+  await b.search({ query: 'q', region: 'zh-CN' }, undefined)
+  assert.ok(calls[1].url.includes('mkt=zh-CN'))
+  await b.search({ query: 'q', region: 'vn', language: 'vi' }, undefined)
+  assert.ok(calls[2].url.includes('mkt=vi-VN'))
+  await b.search({ query: 'q' }, undefined)
+  assert.ok(calls[3].url.includes('mkt=en-US'))
+})
+
+test('bing throws on a non-RSS response instead of returning empty', async () => {
+  const { create } = await import('../src/backends/bing.js')
+  // Consent/anti-bot pages come back as 200 + HTML — that is an error.
+  installFetch(() => ({ status: 200, body: '<html><body>challenge page</body></html>' }))
+  const b = create()
+  await assert.rejects(() => b.search({ query: 'q' }, undefined), /non-RSS response/)
+})
+
 test('ddg parses result anchors and resolves uddg redirects', async () => {
   const { create } = await import('../src/backends/ddg.js')
   const html = '<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fa.com%2F1&amp;rut=abc">Title</a>' +
@@ -142,6 +202,35 @@ test('ddg parses result anchors and resolves uddg redirects', async () => {
   assert.equal(res.sources[0].url, 'https://a.com/1')
   assert.equal(res.sources[0].snippet, 'Snip')
   assert.equal(res.sources[1].url, 'https://b.com/2')
+})
+
+test('ddg pairs snippets by proximity and ignores attribute order', async () => {
+  const { create } = await import('../src/backends/ddg.js')
+  // href BEFORE class (attribute order flip). The middle result is a
+  // DUPLICATE URL (filtered out) and carries its own snippet — with the old
+  // ordinal-index pairing, that orphan snippet would land on the third
+  // result; proximity pairing keeps them aligned.
+  const html = '<a href="https://a.com/1" class="result__a">One</a>' +
+    '<a href="#" class="result__snippet">SnipOne</a>' +
+    '<a href="https://a.com/1" class="result__a">OneDup</a>' +
+    '<a href="#" class="result__snippet">SnipDup</a>' +
+    '<a href="https://b.com/2" class="result__a">Two</a>' +
+    '<a href="#" class="result__snippet">SnipTwo</a>'
+  installFetch(() => ({ status: 200, body: html }))
+  const b = create()
+  const res = await b.search({ query: 'q' }, undefined)
+  assert.equal(res.sources.length, 2)
+  assert.equal(res.sources[0].url, 'https://a.com/1')
+  assert.equal(res.sources[0].snippet, 'SnipOne')
+  assert.equal(res.sources[1].url, 'https://b.com/2')
+  assert.equal(res.sources[1].snippet, 'SnipTwo')
+})
+
+test('ddg throws on an unrecognized page instead of returning empty', async () => {
+  const { create } = await import('../src/backends/ddg.js')
+  installFetch(() => ({ status: 200, body: '<html><body>anomaly challenge</body></html>' }))
+  const b = create()
+  await assert.rejects(() => b.search({ query: 'q' }, undefined), /unrecognized response/)
 })
 
 test('stack decodes entities and builds advanced-search params', async () => {
@@ -156,6 +245,11 @@ test('stack decodes entities and builds advanced-search params', async () => {
   assert.ok(calls[0].url.includes('tagged=go'))
   assert.ok(calls[0].url.includes('accepted=true'))
   assert.match(res.sources[0].snippet, /12 · 2 answers · accepted/)
+  // A low API quota is NOT "truncated" — the flag must stay reserved for
+  // actual result truncation (it pollutes merged fan-out results otherwise).
+  assert.equal(res.truncated, undefined)
+  await b.search({ query: 'q', extra: { sort: 'activity' } }, undefined)
+  assert.ok(calls[1].url.includes('sort=activity'))
 })
 
 test('hn builds numericFilters from days and maps Ask-HN links', async () => {
@@ -169,6 +263,13 @@ test('hn builds numericFilters from days and maps Ask-HN links', async () => {
   assert.equal(res.sources[0].url, 'https://news.ycombinator.com/item?id=42')
   assert.equal(res.sources[0].title, 'Ask HN: x')
   assert.ok(calls[0].url.includes('numericFilters=created_at_i%3E'))
+})
+
+test('hn rejects an unsupported extra.type instead of silently dropping the filter', async () => {
+  const { create } = await import('../src/backends/hn.js')
+  installFetch(() => ({ status: 200, body: JSON.stringify({ hits: [] }) }))
+  const b = create()
+  await assert.rejects(() => b.search({ query: 'q', extra: { type: 'show' } }, undefined), /extra\.type must be/)
 })
 
 test('academic s2 maps authors into snippets', async () => {
@@ -195,6 +296,20 @@ test('academic arxiv parses Atom entries', async () => {
   assert.equal(res.sources[0].publishedAt, '2026-01-02')
 })
 
+test('academic arxiv quotes multi-word queries and applies the year filter', async () => {
+  const { create } = await import('../src/backends/academic.js')
+  const atom = '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+  installFetch(() => ({ status: 200, body: atom }))
+  const b = create({ keys: {} })
+  await b.search({ query: 'transformer scaling law', extra: { provider: 'arxiv' } }, undefined)
+  // Unquoted, arXiv OR-expands multi-word queries into hundreds of thousands
+  // of irrelevant hits — the phrase must be quoted (%22).
+  assert.ok(calls[0].url.includes('all%3A%22transformer+scaling+law%22'))
+  await b.search({ query: 'agent memory', extra: { provider: 'arxiv', field: 'cs.AI', year: 2024 } }, undefined)
+  assert.ok(calls[1].url.includes('cat%3Acs.AI'))
+  assert.ok(calls[1].url.includes('submittedDate%3A%5B202401010000'))
+})
+
 test('gh maps repo search items and appends issue qualifiers', async () => {
   const { create } = await import('../src/backends/gh.js')
   installFetch(() => ({
@@ -206,6 +321,21 @@ test('gh maps repo search items and appends issue qualifiers', async () => {
   assert.equal(calls[0].init.headers.authorization, 'Bearer tok')
   assert.ok(calls[0].url.includes('q=q+stars%3A%3E50'))
   assert.equal(res.sources[0].snippet, '100 stars · Go · d')
+})
+
+test('gh rejects anonymous code search early with an actionable error', async () => {
+  const { create } = await import('../src/backends/gh.js')
+  installFetch(() => ({ status: 401, body: JSON.stringify({ message: 'Requires authentication' }) }))
+  // Isolate from this machine's real ~/.config/gh/hosts.yml (the adapter
+  // reads it live per call).
+  const home = process.env.HOME
+  process.env.HOME = '/nonexistent-dsh-websearch-test'
+  try {
+    const b = create({ keys: {}, env: {} })
+    await assert.rejects(() => b.search({ query: 'q', extra: { kind: 'code' } }, undefined), /code search requires a token/)
+  } finally {
+    process.env.HOME = home
+  }
 })
 
 test('anysearch sends optional auth and rejects error envelopes', async () => {
@@ -228,6 +358,25 @@ test('exa uses findSimilar when similar_to is set', async () => {
   await b.search({ query: 'q', similarTo: 'https://tokio.rs' }, undefined)
   assert.equal(calls[0].url, 'https://api.exa.ai/findSimilar')
   assert.equal(jsonBody(calls[0].init).url, 'https://tokio.rs')
+})
+
+test('exa findSimilar also carries freshness and site filters', async () => {
+  const { create } = await import('../src/backends/exa.js')
+  installFetch(() => ({ status: 200, body: JSON.stringify({ results: [] }) }))
+  const b = create({ keys: { exa: 'k' } })
+  await b.search({ query: 'q', similarTo: 'https://tokio.rs', freshness: 'month', includeSites: ['tokio.rs'] }, undefined)
+  const body = jsonBody(calls[0].init)
+  assert.equal(body.startPublishedDate, new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10))
+  assert.deepEqual(body.includeDomains, ['tokio.rs'])
+})
+
+test('exa maps a string summary into a snippet and normalizes dates', async () => {
+  const { create } = await import('../src/backends/exa.js')
+  installFetch(() => ({ status: 200, body: JSON.stringify({ results: [{ title: 't', url: 'https://e.com', summary: 'sum', publishedDate: '2026-03-04' }] }) }))
+  const b = create({ keys: { exa: 'k' } })
+  const res = await b.search({ query: 'q', extra: { highlights: false } }, undefined)
+  assert.equal(res.sources[0].snippet, 'sum')
+  assert.equal(res.sources[0].publishedAt, '2026-03-04')
 })
 
 test('bailian maps the completion content', async () => {

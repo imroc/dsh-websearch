@@ -18,8 +18,9 @@ function keyFromConfigFile() {
 }
 
 export function create({ keys }) {
-  const fileKey = keyFromConfigFile()
-  const currentKey = () => keys.bailian ?? fileKey
+  // The config-file key is re-read per call (not snapshotted) so editing
+  // ~/.bailian/config.json applies without a restart, like the live keys map.
+  const currentKey = () => keys.bailian ?? keyFromConfigFile()
   return {
     id: 'bailian',
     available: () => Boolean(currentKey()),

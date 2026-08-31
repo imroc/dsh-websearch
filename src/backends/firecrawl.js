@@ -36,12 +36,16 @@ export function create({ keys }) {
       if (req.region !== undefined) body.country = req.region
       const data = await fetchJson('firecrawl', ENDPOINT, { method: 'POST', headers: bearer(keys.firecrawl), body, signal, timeoutMs: 30_000 })
       return {
-        sources: collect(data).map((r) => ({
-          url: r.url ?? r.link,
-          ...(r.title !== undefined ? { title: r.title } : {}),
-          ...(r.description ?? r.snippet !== undefined ? { snippet: r.description ?? r.snippet } : {}),
-          ...(toIsoDate(r.publishedDate ?? r.date) !== undefined ? { publishedAt: toIsoDate(r.publishedDate ?? r.date) } : {}),
-        })).filter((s) => typeof s.url === 'string' && s.url.startsWith('http')),
+        sources: collect(data).map((r) => {
+          const snippet = r.description ?? r.snippet
+          const publishedAt = toIsoDate(r.publishedDate ?? r.date)
+          return {
+            url: r.url ?? r.link,
+            ...(r.title !== undefined ? { title: r.title } : {}),
+            ...(snippet !== undefined ? { snippet } : {}),
+            ...(publishedAt !== undefined ? { publishedAt } : {}),
+          }
+        }).filter((s) => typeof s.url === 'string' && s.url.startsWith('http')),
       }
     },
   }

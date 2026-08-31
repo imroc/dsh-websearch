@@ -36,8 +36,11 @@ window.__ModuleLoader__.load({
 
 const NS = 'dsh-websearch'
 
-// Browser-safe copy of the credential-bearing engine table (a client package
-// must not depend on a Host package). `optional` engines work without a key.
+// Browser-safe copy of the engine table (a client package must not depend on
+// a Host package). `optional` engines work without a key; `keyless` engines
+// have no credential at all — the row only carries the enable/disable toggle.
+// test/client.test.js cross-checks this table against src/core/engines.js so
+// the hand-maintained copy cannot drift silently.
 const ENGINES = [
   { id: 'brave', label: 'Brave', ref: 'BRAVE_SEARCH_API_KEY' },
   { id: 'bocha', label: 'Bocha 博查', ref: 'BOCHA_API_KEY' },
@@ -51,6 +54,10 @@ const ENGINES = [
   { id: 'anysearch', label: 'AnySearch', ref: 'ANYSEARCH_API_KEY', optional: true },
   { id: 'academic', label: 'Semantic Scholar', ref: 'S2_API_KEY', optional: true },
   { id: 'gh', label: 'GitHub', ref: 'GITHUB_TOKEN', optional: true },
+  { id: 'bing', label: 'Bing', keyless: true },
+  { id: 'ddg', label: 'DuckDuckGo', keyless: true },
+  { id: 'stack', label: 'StackExchange', keyless: true },
+  { id: 'hn', label: 'Hacker News', keyless: true },
 ]
 
 /** Minimal snapshot store (getSnapshot/subscribe) for the slot's useX hook. */
@@ -136,7 +143,7 @@ function createStore(initial) {
   }
 
   async function readCredentials() {
-    const refs = ENGINES.map((e) => e.ref)
+    const refs = ENGINES.map((e) => e.ref).filter((r) => r !== undefined)
     const view = await describeCredentials(refs)
     if (Object.keys(view).length === 0 && !store.getSnapshot().loaded) {
       // Nothing answered yet — keep the loading state; a later invalidation
@@ -148,8 +155,8 @@ function createStore(initial) {
       loaded: true,
       engines: ENGINES.map((e) => ({
         ...e,
-        configured: view[e.ref]?.configured ?? false,
-        writable: view[e.ref]?.writable ?? true,
+        configured: e.keyless === true ? true : view[e.ref]?.configured ?? false,
+        writable: e.keyless === true ? false : view[e.ref]?.writable ?? true,
       })),
     })
   }
@@ -173,7 +180,13 @@ function createStore(initial) {
     if (snap.writable !== true) return
     const current = Array.isArray(snap.value?.disable) ? snap.value.disable : []
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-    await scope.set('disable', next)
+    try {
+      await scope.set('disable', next)
+    } catch (e) {
+      // Same rule as the key save path: never let a failed write become an
+      // unhandled rejection the user only sees as "nothing happened".
+      console.error('[dsh-websearch] toggle engine failed:', e)
+    }
   }
 
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
@@ -221,9 +234,11 @@ function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(false)
-  const status = engine.configured
-    ? h('span', { style: badge('rgba(46,160,67,.9)') }, engine.writable ? '已配置' : 'env 提供')
-    : h('span', { style: badge('rgba(128,128,128,.5)') }, engine.optional ? '免 key 可用' : '未配置')
+  const status = engine.keyless === true
+    ? h('span', { style: badge('rgba(70,130,220,.8)') }, '免 key')
+    : engine.configured
+      ? h('span', { style: badge('rgba(46,160,67,.9)') }, engine.writable ? '已配置' : 'env 提供')
+      : h('span', { style: badge('rgba(128,128,128,.5)') }, engine.optional ? '免 key 可用' : '未配置')
   return h('div', { style: rowStyle, key: engine.id },
     h('label', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
       canToggle
@@ -236,9 +251,9 @@ function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
         : null,
       h('span', { style: nameStyle }, engine.label),
     ),
-    h('span', { style: refStyle }, engine.ref),
+    engine.keyless === true ? null : h('span', { style: refStyle }, engine.ref),
     status,
-    h('input', {
+    engine.keyless === true ? null : h('input', {
       type: 'password',
       style: { ...inputStyle, ...(engine.writable ? {} : { opacity: 0.4 }), ...(error ? { borderColor: 'rgba(220,80,80,.9)' } : {}) },
       placeholder: engine.writable ? (error ? '保存失败，重试或查看 console' : '粘贴 API key…') : '由环境变量提供，UI 不可覆盖',
@@ -246,7 +261,7 @@ function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
       disabled: !engine.writable,
       onChange: (e) => { setValue(e.target.value); setError(false) },
     }),
-    h('button', {
+    engine.keyless === true ? null : h('button', {
       style: buttonStyle,
       disabled: !engine.writable || saving || value.trim() === '',
       onClick: async () => {
@@ -288,6 +303,9 @@ function WebsearchCard(props) {
 }
 
     exports.apply = apply
+    // Exposed for the unit-test cross-check against src/core/engines.js —
+    // the plugin itself never reads this field.
+    exports.ENGINES = ENGINES
     return module.exports
   },
 })

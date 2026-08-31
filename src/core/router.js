@@ -103,20 +103,27 @@ export async function fanOutQuery(req, registry, { signal, engines } = {}) {
     throw new BackendError('fan_out', 'no available engine for fan-out')
   }
   const attempts = []
+  const t0 = Date.now()
   const settled = await Promise.allSettled(backends.map(async (b) => {
-    const t0 = Date.now()
     const raw = await b.search(req, signal)
-    return { engine: b.id, result: normalizeResult(b.id, raw, req.maxResults), elapsedMs: Date.now() - t0 }
+    return { engine: b.id, result: normalizeResult(b.id, raw, req.maxResults) }
   }))
   const results = []
   for (let i = 0; i < settled.length; i++) {
     const s = settled[i]
+    const elapsedMs = Date.now() - t0
     if (s.status === 'fulfilled') {
-      attempts.push({ engine: s.value.engine, ok: true, count: s.value.result.sources.length, elapsedMs: s.value.elapsedMs })
+      attempts.push({ engine: s.value.engine, ok: true, count: s.value.result.sources.length, elapsedMs })
       results.push(s.value.result)
     } else {
-      attempts.push({ engine: backends[i].id, ok: false, count: 0, elapsedMs: 0, error: s.reason?.message ?? String(s.reason) })
+      attempts.push({ engine: backends[i].id, ok: false, count: 0, elapsedMs, error: s.reason?.message ?? String(s.reason) })
     }
+  }
+  // A cancelled call is a cancellation, not an engine failure — propagate the
+  // abort reason instead of reporting "all engines failed".
+  if (settled.some((s) => s.status === 'rejected') && signal?.aborted) {
+    const reason = signal.reason
+    throw reason instanceof Error ? reason : new BackendError('fan_out', 'aborted')
   }
   const okResults = results.filter((r) => !isEmpty(r))
   if (okResults.length === 0 && results.length === 0) {
@@ -192,7 +199,7 @@ export async function orchestrate(spec, registry) {
     return { query: q.query, ...run }
   }))
   const perQuery = runs.map((r) => r.result)
-  const merged = mergeResults(perQuery, Math.max(spec.maxResults ?? 8, (spec.maxResults ?? 8) * queries.length))
+  const merged = mergeResults(perQuery, (spec.maxResults ?? 8) * queries.length)
   // Section multi-query answers by query, mirroring tool-web's merge.
   if (queries.length > 1) {
     const sections = runs

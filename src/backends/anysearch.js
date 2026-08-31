@@ -5,7 +5,7 @@
 import { BackendError, fetchJson } from '../core/http.js'
 
 const ENDPOINT = 'https://api.anysearch.com/v1/search'
-const CLIENT = 'dsh-websearch/0.1.0'
+const CLIENT = 'dsh-websearch/0.2.4'
 
 export function create({ keys }) {
   return {
@@ -25,11 +25,14 @@ export function create({ keys }) {
       }
       const results = data?.data?.results ?? []
       return {
-        sources: results.map((r) => ({
-          url: r.url,
-          ...(r.title !== undefined ? { title: r.title } : {}),
-          ...(r.content ?? r.snippet !== undefined ? { snippet: r.content ?? r.snippet } : {}),
-        })),
+        sources: results.map((r) => {
+          const snippet = r.content ?? r.snippet
+          return {
+            url: r.url,
+            ...(r.title !== undefined ? { title: r.title } : {}),
+            ...(snippet !== undefined ? { snippet } : {}),
+          }
+        }),
       }
     },
   }

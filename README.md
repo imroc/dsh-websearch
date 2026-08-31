@@ -27,10 +27,12 @@ DSH's built-in `web_search` goes through exactly one search provider (`deepseek-
 | `firecrawl` | Firecrawl search | `FIRECRAWL_API_KEY` | — | web/news |
 | `stack` | StackExchange | — | ✓ | programming Q&A |
 | `hn` | Hacker News (Algolia) | — | ✓ | tech community discussion |
-| `academic` | Semantic Scholar / arXiv | `S2_API_KEY` (optional) | ✓ | papers (`extra.provider`) |
-| `gh` | GitHub Search | `GITHUB_TOKEN` / `GH_TOKEN` / gh CLI token (optional) | ✓ | repos/issues/PRs/code |
+| `academic` | Semantic Scholar / arXiv | `S2_API_KEY` (optional) | ✓ | papers (`extra.provider`; `extra.year` filters both providers, from-year semantics) |
+| `gh` | GitHub Search | `GITHUB_TOKEN` / `GH_TOKEN` / gh CLI token (optional) | ✓ | repos/issues/PRs/code (code search requires a token) |
 
-Keys resolve as `config.keys.<id>` (literal) → env var → engine unavailable. Missing keys never crash: the engine just drops out of every routing chain.
+Keys resolve as `config.keys.<id>` (literal) → credentials service (which itself layers env > `~/.dsh/.credentials.yaml` > `.env`) → environment variable. Missing keys never crash: the engine just drops out of every routing chain.
+
+> Freshness note: the `YYYY-MM-DDtoYYYY-MM-DD` range form is fully honored by brave (native), exa (start date), wsa (FromTime/ToTime) and Google-backed engines (serper/firecrawl, via `tbs` `cdr`); tavily widens any range to "past year" and bocha/zhipu drop the filter — those APIs have no custom-range vocabulary.
 
 ## Install
 
@@ -60,7 +62,7 @@ and restart DSH. The bundle patch mounts the plugin and pins `web.searchProvider
 
 > **Env shadows the UI store**: the credentials layering is `process environment > ~/.dsh/.credentials.yaml > .env`. If dsh-web inherits a key as a real environment variable, a value saved in the Web UI cannot take effect until that variable is removed from the service environment (the card marks such engines "env-provided" and disables the input).
 
-The Plugins card also carries per-engine enable/disable checkboxes — the `disable` array of the `dsh-websearch` settings section, hot-applied. The same field can be edited in `~/.dsh/settings.yaml`:
+The Plugins card also carries per-engine enable/disable checkboxes for all 16 engines (keyless ones included) — the `disable` array of the `dsh-websearch` settings section, hot-applied. The same field can be edited in `~/.dsh/settings.yaml`:
 
 ```yaml
 dsh-websearch:
@@ -99,7 +101,7 @@ Auto-routing: CJK queries → `bocha`, otherwise `brave`; hard failures fall bac
 ## Development
 
 ```bash
-npm test                     # 41 unit tests (no network)
+npm test                     # 66 unit tests (no network)
 node scripts/smoke.mjs       # one live query per backend with real keys
 ```
 

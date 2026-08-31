@@ -26,7 +26,7 @@ export const ENGINE_INFO = {
   stack: { label: 'StackExchange', kind: 'vertical', free: true, note: 'programming Q&A — precise for error messages (extra.site, extra.tagged, extra.sort, extra.answered)' },
   hn: { label: 'Hacker News', kind: 'vertical', free: true, note: 'tech community discussion and sentiment (extra.type=story|comment, extra.sort=relevance|date, extra.days)' },
   academic: { label: 'Semantic Scholar / arXiv', kind: 'vertical', keyEnv: 'S2_API_KEY', free: true, note: 'papers (extra.provider=s2|arxiv, extra.year, extra.field e.g. cs.AI); optional S2_API_KEY raises the strict anonymous rate limit' },
-  gh: { label: 'GitHub', kind: 'vertical', free: true, note: 'repos/issues/PRs/code search; qualifiers go in the query (extra.kind=repos|issues|prs|code, extra.sort)' },
+  gh: { label: 'GitHub', kind: 'vertical', keyEnv: 'GITHUB_TOKEN', free: true, note: 'repos/issues/PRs/code search; qualifiers go in the query (extra.kind=repos|issues|prs|code, extra.sort); optional GITHUB_TOKEN raises the 10/min anonymous rate limit and is required for code search' },
 }
 
 export const ENGINE_IDS = Object.keys(ENGINE_INFO)

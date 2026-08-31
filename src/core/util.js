@@ -3,7 +3,11 @@
 
 const DAY = 86400_000
 
-/** Whether the text contains CJK ideographs (routes Chinese queries to Chinese engines). */
+/**
+ * Whether the text contains CJK ideographs — deliberately Chinese-only (no
+ * kana/hangul): the Chinese-first routing exists because bocha/zhipu/wsa are
+ * Chinese-market engines, not because the detector claims full CJK coverage.
+ */
 export function isCJK(text) {
   return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(text ?? '')
 }
@@ -70,7 +74,13 @@ export function freshnessTbs(f) {
   if (p.days !== undefined) {
     return { 1: 'qdr:d', 7: 'qdr:w', 30: 'qdr:m', 365: 'qdr:y' }[p.days]
   }
-  return `qdr:c:${p.from}..${p.to}`
+  // Custom ranges use the cdr (custom date range) vocabulary with MM/DD/YYYY
+  // bounds — Google silently ignores anything else (e.g. `qdr:c:from..to`).
+  const us = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+    return m === null ? iso : `${m[2]}/${m[3]}/${m[1]}`
+  }
+  return `cdr:1,cd_min:${us(p.from)},cd_max:${us(p.to)}`
 }
 
 /** Exa startPublishedDate: ISO date of the window start. */

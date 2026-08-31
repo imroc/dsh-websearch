@@ -106,6 +106,18 @@ test('fanOutQuery merges concurrent engine results and tolerates failures', asyn
   assert.equal(attempts.find((a) => a.engine === 'bocha').ok, true)
 })
 
+test('fanOutQuery propagates cancellation instead of reporting engine failures', async () => {
+  const controller = new AbortController()
+  const reason = new Error('user cancelled')
+  const reg = registry(
+    backend('brave', () => { throw reason }),
+    backend('bocha', () => { throw reason }),
+  )
+  const promise = fanOutQuery({ query: 'q' }, reg, { engines: ['brave', 'bocha'], signal: controller.signal })
+  controller.abort(reason)
+  await assert.rejects(promise, (e) => e === reason)
+})
+
 test('orchestrate routes each batch query independently and merges', async () => {
   const reg = registry(
     backend('bocha', (req) => ({ sources: [{ url: `https://cn.example/${req.query}` }] })),

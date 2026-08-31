@@ -34,16 +34,27 @@ async function searchS2(req, signal, apiKey) {
 }
 
 async function searchArxiv(req, signal) {
-  let searchQuery = `all:${req.query}`
+  // Multi-word queries MUST be quoted: unquoted `all:w1 w2 w3` is OR-expanded
+  // by the arXiv API into millions of irrelevant hits (live-verified
+  // 2026-08-31: "transformer scaling law" → 601k results unquoted, 3 quoted).
+  let searchQuery = `all:"${req.query}"`
   if (typeof req.extra?.field === 'string' && req.extra.field !== '') {
-    searchQuery = `cat:${req.extra.field} AND all:${req.query}`
+    searchQuery = `cat:${req.extra.field} AND all:"${req.query}"`
+  }
+  const year = Number(req.extra?.year)
+  if (Number.isFinite(year) && year > 1900) {
+    // Same from-year semantics as the S2 path (year → [Jan 1, now]).
+    const pad = (n) => String(n).padStart(2, '0')
+    const now = new Date()
+    const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`
+    searchQuery += ` AND submittedDate:[${Math.trunc(year)}01010000 TO ${stamp}]`
   }
   const params = { search_query: searchQuery, max_results: clamp(req.maxResults ?? 5, 1, 50), sortBy: 'relevance' }
   const xml = await fetchText('academic', `${ARXIV}?${qs(params)}`, {
     headers: { 'user-agent': 'research-agent/1.0 (academic search)' },
     signal,
-    timeoutMs: 60_000,
-    retries: 2,
+    timeoutMs: 30_000,
+    retries: 1,
   })
   // Rate-limited arXiv returns an HTML page instead of Atom XML.
   if (!xml.includes('<feed')) {
