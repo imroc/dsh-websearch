@@ -72,10 +72,15 @@ function createStore(initial) {
 
     function apply(ctx) {
   const scope = ctx.settingsScope.bind({ namespace: NS })
-  // rc.2: remote.credentials is a sub-object of the remote service; master:
-  // an injectable service of its own (ctx.get reads it without declaring a
-  // hard dependency, so both releases resolve here).
-  const credentials = ctx.get('remote.credentials') ?? ctx.remote.credentials
+  // The credentials remote API lives in a different place per release:
+  //   master:     injectable service 'remote.credentials' — describe(refs) → {ok, value}
+  //   0.1.1-rc.2: ctx.get('connection').api.credentials — describe({refs}) → {result: {ok, value: {credentials}}}
+  // (evidence: rc.2 ui-settings-plugins does `const { api } = ctx.get("connection")`
+  // then `api.credentials.describe(...)`). ctx.get reads optional services
+  // without declaring injects, so both releases resolve here.
+  const credentials = ctx.get('remote.credentials')
+    ?? ctx.get('connection')?.api?.credentials
+    ?? ctx.remote?.credentials
   const store = createStore({
     loaded: false,
     engines: ENGINES.map((e) => ({ ...e, configured: false, writable: true })),
@@ -215,6 +220,7 @@ const badge = (color) => ({ fontSize: 11, padding: '2px 7px', borderRadius: 999,
 function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(false)
   const status = engine.configured
     ? h('span', { style: badge('rgba(46,160,67,.9)') }, engine.writable ? '已配置' : 'env 提供')
     : h('span', { style: badge('rgba(128,128,128,.5)') }, engine.optional ? '免 key 可用' : '未配置')
@@ -234,20 +240,24 @@ function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
     status,
     h('input', {
       type: 'password',
-      style: { ...inputStyle, ...(engine.writable ? {} : { opacity: 0.4 }) },
-      placeholder: engine.writable ? '粘贴 API key…' : '由环境变量提供，UI 不可覆盖',
+      style: { ...inputStyle, ...(engine.writable ? {} : { opacity: 0.4 }), ...(error ? { borderColor: 'rgba(220,80,80,.9)' } : {}) },
+      placeholder: engine.writable ? (error ? '保存失败，重试或查看 console' : '粘贴 API key…') : '由环境变量提供，UI 不可覆盖',
       value,
       disabled: !engine.writable,
-      onChange: (e) => setValue(e.target.value),
+      onChange: (e) => { setValue(e.target.value); setError(false) },
     }),
     h('button', {
       style: buttonStyle,
       disabled: !engine.writable || saving || value.trim() === '',
       onClick: async () => {
         setSaving(true)
+        setError(false)
         try {
           await onSetKey(engine.ref, value.trim())
           setValue('')
+        } catch (e) {
+          setError(true)
+          console.error('[dsh-websearch] save key failed:', e)
         } finally {
           setSaving(false)
         }
