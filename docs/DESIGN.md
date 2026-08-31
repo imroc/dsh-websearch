@@ -1,8 +1,22 @@
 # dsh-websearch — 设计定稿
 
-日期：2026-09-06 · 状态：v0.2.0（密钥 UI 化）· 适用：DSH 0.1.1-rc.2（源码 master `0a53fb5` 验证接缝）
+日期：2026-09-06 · 状态：v0.2.3 · 适用：DSH 0.1.1-rc.2 装机实测（源码 master `0a53fb5` 仅作对照，API 有差异见 §8）
 
-> **v0.2.0 增量**：密钥配置 UI 化。宿主侧 `settings.installSection`（namespace `dsh-websearch`，schema `{disable: string[], keys: dict(secret)}`）+ key 走 `credentials.resolve(credentialRef(refName))` 惰性解析（层叠：字面量 config > credentials 服务[内部 env > .credentials.yaml > .env] > process env）；`credentials/reference-updated` 事件与 settings onChange 触发 refreshKeys，写入 live keys map（后端每次调用现读，热生效）。浏览器半边 `client.js`（`dsh.client.platform: web` + `exports["./client"]`）在 `settings.plugin.item` keyed slot（key=namespace）注册卡片：`remote.credentials.describe/set` 管密钥（明文永不上行回显）、settings scope 管 disable 复选框。**关键告警：进程 env 遮蔽 UI 存储**——本机 dsh-web 服务 env 已有 9 个 key，UI 保存的同名值不生效，需从服务环境移除对应变量后 UI 才是权威源。
+> **v0.2.x 增量（密钥配置 UI 化 + rc.2 兼容）**：宿主侧注册 settings section（namespace `dsh-websearch`，schema `{disable: string[], keys: dict(secret)}`）+ key 走 `credentials.resolve(credentialRef(refName))` 惰性解析（层叠：字面量 config > credentials 服务[内部 env > .credentials.yaml > .env] > process env）；`credentials/reference-updated` 事件与 settings scope watch 触发 refreshKeys，写入 live keys map（后端每次调用现读，热生效）。浏览器半边 `client.js`（`dsh.client.platform: web` + `exports["./client"]`）在 `settings.plugin.item` keyed slot（key=namespace）注册卡片：credentials remote 管密钥（明文永不上行回显）、settings scope 管 disable 复选框。**关键告警：进程 env 遮蔽 UI 存储**——credentials 层叠 env 优先，服务进程 env 已有的同名 key 会遮蔽 UI 写入值（卡片对 writable=false 的引擎标注「env 提供」并禁用输入）。
+
+## 8. 版本演进与坑位记录（0.2.x，任何 rc.2 部署都会踩）
+
+以下差异全部**静默失败**（无报错、无日志、部分功能悄悄消失），已全部修复，勿回退成单版本写法：
+
+| # | 差异点 | rc.2（装机） | master（源码） | 失败形态 |
+|---|---|---|---|---|
+| 1 | settings 注册 | 顶层函数 `installSettingsSection(ctx, ns, schema, entry, hooks)`（内部= `settings.register(ns, schema, {base})` + `scope.get/watch`） | 服务方法 `settings.installSection(...)` | 子 fiber 静默死亡：section 不注册、设置页无卡片，但 provider 照常（极具迷惑性） |
+| 2 | 包定位 | client-modules 用 `require.resolve('<pkg>/package.json')`；包一旦声明 exports 映射**必须显式含 `"./package.json"`** | 同 | client 半边静默退出 boot 图（404、无卡片、无报错） |
+| 3 | client bundle 契约 | classic `<script>` 加载，必须 `window.__ModuleLoader__.load({id, factory})` closure-factory，react 从 `require('react')` 取 | 同 | raw ESM（`import`）语法错误 → **整个 Web UI 无法加载** |
+| 4 | credentials remote | 挂在 `ctx.get('connection').api.credentials`；`describe({refs}) → result.value.credentials`、`set({ref, value})` | 独立注入服务 `remote.credentials`；`describe(refs) → value`、`set(ref, value)` | 调用静默 TypeError：徽标恒默认值、保存无效 |
+| 5 | 客户端服务名 | inject 列表无 `remote.credentials`（注入它=永远等待） | 有 | 客户端插件永不激活 |
+
+**排障工具箱**：boot 图 `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`（rev 变化=HMR 生效）；宿主内部态用动态诊断插件读 `settings.describe()`/`clientModules.graph()` 并以 `throw` 带回结果；web seam pin 验证=注册一次性探针 provider 后调 `ctx.web.search`。完整排障过程见 dsh-expert 知识库（`knowledge/dev/20260906-自建dsh-websearch插件设计与实现.md`）。
 
 ## 1. 目标与决策记录
 
