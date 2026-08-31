@@ -12,15 +12,27 @@
 //
 // The Host half registers the settings namespace (index.js installSection);
 // the Plugins tab enumerates it and dispatches to this card by key.
+//
+// DSH client bundles are classic scripts with a closure-factory contract:
+// execution must register a factory via window.__ModuleLoader__.load. The
+// factory receives a module-table require; platform modules such as React are
+// available through it. A raw ES module is served as a classic script and
+// fails before registration with "loaded without registering ...".
 
-import { createElement, useState } from 'react'
+window.__ModuleLoader__.load({
+  id: 'dsh-websearch',
+  factory: (require) => {
+    var module = { exports: {} }
+    var exports = module.exports
 
-export const name = 'dsh-websearch-client'
+    const { createElement, useState } = require('react')
+
+    exports.name = 'dsh-websearch-client'
 
 // Service names that exist in BOTH 0.1.1-rc.2 and master. Note
 // `remote.credentials` is its own injectable service only on master; on rc.2
 // it is a plain sub-object of `remote` — resolved defensively in apply().
-export const inject = ['slots', 'remote', 'settingsScope']
+    exports.inject = ['slots', 'remote', 'settingsScope']
 
 const NS = 'dsh-websearch'
 
@@ -58,7 +70,7 @@ function createStore(initial) {
   }
 }
 
-export function apply(ctx) {
+    function apply(ctx) {
   const scope = ctx.settingsScope.bind({ namespace: NS })
   // rc.2: remote.credentials is a sub-object of the remote service; master:
   // an injectable service of its own (ctx.get reads it without declaring a
@@ -264,3 +276,8 @@ function WebsearchCard(props) {
     ),
   )
 }
+
+    exports.apply = apply
+    return module.exports
+  },
+})
