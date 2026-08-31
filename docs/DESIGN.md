@@ -34,8 +34,8 @@
 | 6 | v1 矩阵 | 全量 16 渠道 + Serper(Google)/Bing 新增，共 16 个引擎 id（academic 内含 s2/arxiv 两数据源） |
 | 7 | 路由 | 自动路由（中文→bocha，其它→brave）+ 顺序降级链（尾部 AnySearch 匿名 + DDG 永远免费可用）；fan-out 仅显式要求 |
 | 8 | SearXNG | 不做，不预留 |
-| 9 | 旧技能 | 暂不动（并行过渡，稳定后再处置） |
-| 10 | 部署 | 动态插件原型验证接缝 → 静态 npm 包落 `~/.dsh/profiles/web` |
+| 9 | 旧技能 | 已移除（2026-08-31）：插件装进 web + dsh-tui 双 profile 后，skills 仓的 websearch 技能（16 渠道 bash 脚本）git rm 退役，reach 技能路由改指插件工具 |
+| 10 | 部署 | 动态插件原型验证接缝 → 静态包落 `~/.dsh/profiles/web` + `~/.dsh/profiles/dsh-tui`（均 `file:` 依赖） |
 
 ## 2. 架构
 
