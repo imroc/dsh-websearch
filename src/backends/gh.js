@@ -25,16 +25,18 @@ function toIsoDateOr(value) {
 }
 
 export function create({ keys, env }) {
-  const token = keys.gh ?? env.GITHUB_TOKEN ?? env.GH_TOKEN ?? tokenFromGhHosts()
-  const headers = {
-    accept: 'application/vnd.github+json',
-    'x-github-api-version': '2022-11-28',
-    ...(token !== undefined ? { authorization: `Bearer ${token}` } : {}),
-  }
+  const hostsToken = tokenFromGhHosts()
+  const currentToken = () => keys.gh ?? env.GITHUB_TOKEN ?? env.GH_TOKEN ?? hostsToken
   return {
     id: 'gh',
     available: () => true,
     async search(req, signal) {
+      const token = currentToken()
+      const headers = {
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+        ...(token !== undefined ? { authorization: `Bearer ${token}` } : {}),
+      }
       const kind = req.extra?.kind ?? 'repos'
       const endpoints = { repos: '/search/repositories', issues: '/search/issues', prs: '/search/issues', code: '/search/code' }
       const endpoint = endpoints[kind]

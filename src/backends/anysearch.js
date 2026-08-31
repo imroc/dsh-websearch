@@ -8,7 +8,6 @@ const ENDPOINT = 'https://api.anysearch.com/v1/search'
 const CLIENT = 'dsh-websearch/0.1.0'
 
 export function create({ keys }) {
-  const apiKey = keys.anysearch
   return {
     id: 'anysearch',
     available: () => true,
@@ -18,7 +17,7 @@ export function create({ keys }) {
       if (req.extra?.params !== undefined && typeof req.extra.params === 'object') body.params = req.extra.params
       if (typeof req.extra?.zone === 'string') body.zone = req.extra.zone
       if (req.language !== undefined) body.language = req.language
-      const headers = { 'x-anysearch-client': CLIENT, ...(apiKey !== undefined ? { authorization: `Bearer ${apiKey}` } : {}) }
+      const headers = { 'x-anysearch-client': CLIENT, ...(keys.anysearch !== undefined ? { authorization: `Bearer ${keys.anysearch}` } : {}) }
       const data = await fetchJson('anysearch', ENDPOINT, { method: 'POST', headers, body, signal, timeoutMs: 40_000 })
       const code = data?.code ?? 0
       if (code !== 0) {

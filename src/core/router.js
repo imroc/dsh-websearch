@@ -180,9 +180,11 @@ export async function orchestrate(spec, registry) {
     const req = { ...common, query: q.query }
     const explicit = q.engine ?? spec.engine
     if (explicit !== undefined) {
-      const backend = registry.get(explicit)
-      if (backend === undefined) throw new BackendError(explicit, `unknown engine "${explicit}"`)
-      if (!backend.available()) throw new BackendError(explicit, `engine "${explicit}" is unavailable (missing API key or disabled)`)
+      const known = typeof registry.knows === 'function' ? registry.knows(explicit) : registry.get(explicit) !== undefined
+      if (!known) throw new BackendError(explicit, `unknown engine "${explicit}"`)
+      if (registry.get(explicit) === undefined || !registry.get(explicit).available()) {
+        throw new BackendError(explicit, `engine "${explicit}" is unavailable (missing API key or disabled)`)
+      }
     }
     const run = spec.fanOut === true
       ? await fanOutQuery(req, registry, { signal, engines: spec.fanOutEngines })

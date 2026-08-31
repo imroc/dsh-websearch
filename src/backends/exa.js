@@ -7,10 +7,9 @@ import { clamp, freshnessStartISO } from '../core/util.js'
 const BASE = 'https://api.exa.ai'
 
 export function create({ keys }) {
-  const apiKey = keys.exa
   return {
     id: 'exa',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.exa),
     async search(req, signal) {
       const contents = {
         highlights: req.extra?.highlights !== false,
@@ -35,7 +34,7 @@ export function create({ keys }) {
         if (since !== undefined) body.startPublishedDate = since
         if (req.includeSites !== undefined && req.includeSites.length > 0) body.includeDomains = req.includeSites
       }
-      const data = await fetchJson('exa', url, { method: 'POST', headers: bearer(apiKey), body, signal })
+      const data = await fetchJson('exa', url, { method: 'POST', headers: bearer(keys.exa), body, signal })
       const results = data?.results ?? []
       return {
         ...(typeof data?.output === 'string' && data.output !== '' ? { content: data.output } : {}),

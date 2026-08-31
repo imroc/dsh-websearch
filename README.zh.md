@@ -54,17 +54,23 @@ dsh plugin --profile web add /path/to/dsh-websearch
 
 ## 配置
 
-在 `$DSH_HOME/cordis.patch.yml`（热重载）或 profile 的 `cordis.patch.yml` 里按 id 覆盖：
+**API key** —— 三层解析，先到先得：
+
+1. 插件行 config 里的字面量 key（`cordis.patch.yml`）——不建议，密钥落配置文件。
+2. **credentials 服务**：Web UI 的 设置 → 插件 → **Web Search（dsh-websearch）** 卡片。密钥经 credentials 域写入 `~/.dsh/.credentials.yaml`，永不回显，保存即热生效（无需重启）。
+3. 环境变量（`BRAVE_SEARCH_API_KEY`、`BOCHA_API_KEY`、`ZHIPU_API_KEY`、`WSAPI_KEY`、`DASHSCOPE_API_KEY`、`EXA_API_KEY`、`TAVILY_API_KEY`、`SERPER_API_KEY`、`FIRECRAWL_API_KEY`，可选 `ANYSEARCH_API_KEY` / `S2_API_KEY` / `GITHUB_TOKEN`）。
+
+> **env 会遮蔽 UI 存储**：credentials 层叠为 `进程环境变量 > ~/.dsh/.credentials.yaml > .env`。若 dsh-web 进程继承了这个 key 的环境变量，UI 里保存的值不会生效，直到该变量从服务环境中移除（卡片会把这类引擎标为「env 提供」并禁用输入框）。
+
+插件卡片还提供每引擎的启用/禁用复选框——即 `dsh-websearch` settings section 的 `disable` 数组，热生效。同样的字段也可以直接编辑 `~/.dsh/settings.yaml`：
 
 ```yaml
-- id: websearch
-  config:
-    disable: [bing]          # 彻底禁用的引擎 id
-    keys:                     # 字面量 key，优先于环境变量
-      brave: xxx
-    defaults:                 # 预留
-      maxResults: 8
+dsh-websearch:
+  disable:
+    - bing
 ```
+
+缺 key 永不崩溃：该引擎自动退出所有路由链。`anysearch`/`gh`/`bing`/`ddg`/`stack`/`hn`/`academic` 无 key 也可用。
 
 ## web_search_pro 工具
 

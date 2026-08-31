@@ -1,6 +1,8 @@
 # dsh-websearch — 设计定稿
 
-日期：2026-09-06 · 状态：v1 定稿（三轮需求 grill 收敛）· 适用：DSH 0.1.1-rc.2（源码 master `0a53fb5` 验证接缝）
+日期：2026-09-06 · 状态：v0.2.0（密钥 UI 化）· 适用：DSH 0.1.1-rc.2（源码 master `0a53fb5` 验证接缝）
+
+> **v0.2.0 增量**：密钥配置 UI 化。宿主侧 `settings.installSection`（namespace `dsh-websearch`，schema `{disable: string[], keys: dict(secret)}`）+ key 走 `credentials.resolve(credentialRef(refName))` 惰性解析（层叠：字面量 config > credentials 服务[内部 env > .credentials.yaml > .env] > process env）；`credentials/reference-updated` 事件与 settings onChange 触发 refreshKeys，写入 live keys map（后端每次调用现读，热生效）。浏览器半边 `client.js`（`dsh.client.platform: web` + `exports["./client"]`）在 `settings.plugin.item` keyed slot（key=namespace）注册卡片：`remote.credentials.describe/set` 管密钥（明文永不上行回显）、settings scope 管 disable 复选框。**关键告警：进程 env 遮蔽 UI 存储**——本机 dsh-web 服务 env 已有 9 个 key，UI 保存的同名值不生效，需从服务环境移除对应变量后 UI 才是权威源。
 
 ## 1. 目标与决策记录
 

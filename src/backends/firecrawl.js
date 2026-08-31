@@ -21,10 +21,9 @@ function collect(data) {
 }
 
 export function create({ keys }) {
-  const apiKey = keys.firecrawl
   return {
     id: 'firecrawl',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.firecrawl),
     async search(req, signal) {
       const body = { query: req.query, limit: clamp(req.maxResults ?? 5, 1, 100) }
       if (req.topic === 'news') {
@@ -35,7 +34,7 @@ export function create({ keys }) {
       const tbs = freshnessTbs(req.freshness)
       if (tbs !== undefined) body.tbs = tbs
       if (req.region !== undefined) body.country = req.region
-      const data = await fetchJson('firecrawl', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal, timeoutMs: 30_000 })
+      const data = await fetchJson('firecrawl', ENDPOINT, { method: 'POST', headers: bearer(keys.firecrawl), body, signal, timeoutMs: 30_000 })
       return {
         sources: collect(data).map((r) => ({
           url: r.url ?? r.link,

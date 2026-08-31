@@ -1,6 +1,6 @@
 {
   "name": "dsh-websearch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Multi-engine web search for DeepSeek Harness: an aggregated ctx.web search provider (auto-routing + sequential fallback, free engines keep search alive) plus a web_search_pro model tool with per-query engine choice, fan-out, batch and verticals — Brave, Bocha, Zhipu, WSA, Bailian, Exa, Tavily, Serper, Bing, DuckDuckGo, AnySearch, Firecrawl, StackExchange, Hacker News, Semantic Scholar/arXiv, GitHub.",
   "keywords": [
     "dsh",
@@ -12,8 +12,13 @@
   ],
   "type": "module",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
   "files": [
     "index.js",
+    "client.js",
     "src/",
     "cordis.patch.yml",
     "docs/",
@@ -28,12 +33,14 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "*"
+    "@deepseek-ai/dsh-credentials": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "*"
   },
   "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-tools": {
-      "optional": true
-    }
+    "@deepseek-ai/dsh-credentials": { "optional": true },
+    "@deepseek-ai/dsh-tools": { "optional": true },
+    "@deepseek-ai/schemastery": { "optional": true }
   },
   "author": "roc <roc@imroc.cc> (https://imroc.cc)",
   "license": "MIT",
@@ -43,6 +50,15 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
     }
   }
 }

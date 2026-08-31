@@ -10,10 +10,9 @@ function headers(key) {
 }
 
 export function create({ keys }) {
-  const apiKey = keys.brave
   return {
     id: 'brave',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.brave),
     async search(req, signal) {
       const news = req.topic === 'news'
       const params = {
@@ -26,7 +25,7 @@ export function create({ keys }) {
         // to query operators (best-effort).
         ...(!news && req.includeSites?.[0] !== undefined ? { site_filter: req.includeSites[0] } : {}),
       }
-      const data = await fetchJson('brave', `${BASE}/${news ? 'news' : 'web'}/search?${qs(params)}`, { headers: headers(apiKey), signal })
+      const data = await fetchJson('brave', `${BASE}/${news ? 'news' : 'web'}/search?${qs(params)}`, { headers: headers(keys.brave), signal })
       const results = (news ? data?.news?.results : data?.web?.results) ?? []
       return {
         sources: results.map((r) => ({

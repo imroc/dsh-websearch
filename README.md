@@ -52,17 +52,23 @@ and restart DSH. The bundle patch mounts the plugin and pins `web.searchProvider
 
 ## Configure
 
-Override the plugin row by id in `$DSH_HOME/cordis.patch.yml` (hot-reloads) or the profile's `cordis.patch.yml`:
+**API keys** — three layers, first match wins:
+
+1. Literal keys in the plugin row config (`cordis.patch.yml`) — avoid, secrets in files.
+2. The **credentials service**: Settings → Plugins → **Web Search (dsh-websearch)** in the Web UI. Keys are written through the credentials domain into `~/.dsh/.credentials.yaml`, never echoed back, and hot-apply (no restart).
+3. Environment variables (`BRAVE_SEARCH_API_KEY`, `BOCHA_API_KEY`, `ZHIPU_API_KEY`, `WSAPI_KEY`, `DASHSCOPE_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY`, `FIRECRAWL_API_KEY`, optional `ANYSEARCH_API_KEY` / `S2_API_KEY` / `GITHUB_TOKEN`).
+
+> **Env shadows the UI store**: the credentials layering is `process environment > ~/.dsh/.credentials.yaml > .env`. If dsh-web inherits a key as a real environment variable, a value saved in the Web UI cannot take effect until that variable is removed from the service environment (the card marks such engines "env-provided" and disables the input).
+
+The Plugins card also carries per-engine enable/disable checkboxes — the `disable` array of the `dsh-websearch` settings section, hot-applied. The same field can be edited in `~/.dsh/settings.yaml`:
 
 ```yaml
-- id: websearch
-  config:
-    disable: [bing]          # engine ids to remove entirely
-    keys:                     # literal keys override env vars
-      brave: xxx
-    defaults:                 # reserved for future defaults
-      maxResults: 8
+dsh-websearch:
+  disable:
+    - bing
 ```
+
+Missing keys never crash: the engine just drops out of every routing chain. `anysearch`/`gh`/`bing`/`ddg`/`stack`/`hn`/`academic` work without any key.
 
 ## The web_search_pro tool
 

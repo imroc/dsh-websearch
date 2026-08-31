@@ -7,10 +7,9 @@ import { clamp, freshnessTavily, toIsoDate } from '../core/util.js'
 const ENDPOINT = 'https://api.tavily.com/search'
 
 export function create({ keys }) {
-  const apiKey = keys.tavily
   return {
     id: 'tavily',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.tavily),
     async search(req, signal) {
       const body = {
         query: req.query,
@@ -23,7 +22,7 @@ export function create({ keys }) {
       if (tr !== undefined) body.time_range = tr
       if (req.includeSites !== undefined && req.includeSites.length > 0) body.include_domains = req.includeSites
       if (req.excludeSites !== undefined && req.excludeSites.length > 0) body.exclude_domains = req.excludeSites
-      const data = await fetchJson('tavily', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal })
+      const data = await fetchJson('tavily', ENDPOINT, { method: 'POST', headers: bearer(keys.tavily), body, signal })
       const results = data?.results ?? []
       return {
         ...(typeof data?.answer === 'string' && data.answer !== '' ? { content: data.answer } : {}),

@@ -7,15 +7,14 @@ import { clamp, freshnessBocha, toIsoDate } from '../core/util.js'
 const ENDPOINT = 'https://api.bochaai.com/v1/web-search'
 
 export function create({ keys }) {
-  const apiKey = keys.bocha
   return {
     id: 'bocha',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.bocha),
     async search(req, signal) {
       const body = { query: req.query, count: clamp(req.maxResults ?? 10, 1, 50) }
       const f = freshnessBocha(req.freshness)
       if (f !== undefined && f !== 'noLimit') body.freshness = f
-      const data = await fetchJson('bocha', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal })
+      const data = await fetchJson('bocha', ENDPOINT, { method: 'POST', headers: bearer(keys.bocha), body, signal })
       const items = data?.data?.webPages?.value ?? []
       return {
         sources: items.map((it) => ({

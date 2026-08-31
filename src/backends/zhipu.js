@@ -7,10 +7,9 @@ import { clamp, freshnessBocha, toIsoDate } from '../core/util.js'
 const ENDPOINT = 'https://open.bigmodel.cn/api/paas/v4/web_search'
 
 export function create({ keys }) {
-  const apiKey = keys.zhipu
   return {
     id: 'zhipu',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.zhipu),
     async search(req, signal) {
       const body = {
         search_query: req.query,
@@ -22,7 +21,7 @@ export function create({ keys }) {
       if (req.includeSites !== undefined && req.includeSites.length > 0) {
         body.search_domain_filter = req.includeSites
       }
-      const data = await fetchJson('zhipu', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal })
+      const data = await fetchJson('zhipu', ENDPOINT, { method: 'POST', headers: bearer(keys.zhipu), body, signal })
       if (data?.error !== undefined) {
         throw new BackendError('zhipu', `HTTP error: ${data.error.message ?? data.error.code ?? 'unknown'}`)
       }

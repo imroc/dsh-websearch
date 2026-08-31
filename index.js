@@ -11,25 +11,48 @@
 //   2. Model tool `web_search_pro` — per-query engine choice, batch (≤5),
 //      fan-out, normalized parameter surface (freshness/sites/language/…),
 //      engine-specific extras, and per-attempt telemetry.
-//   3. Per-agent system-prompt section `tool:web_search_pro` with the
-//      scenario → engine routing guide (registered on agent/session-start,
-//      WeakSet-deduplicated because the event can re-fire on clear/compact).
+//   3. Settings section `dsh-websearch` (disable list) — the Plugins page
+//      enumerates the namespace and the browser half (client.js) renders its
+//      card: per-engine credential fields written through the credentials
+//      service (never into the settings document, never echoed back).
+//   4. Per-agent system-prompt section `tool:web_search_pro` with the
+//      scenario → engine routing guide.
+//
+// Key resolution mirrors web-search-deepseek's official pattern: literal
+// composition config > credentials service (which layers process env >
+// managed ~/.dsh/.credentials.yaml > .env) > process env. Keys live in a
+// mutable map the backends read per call, so a key saved in the Web UI
+// hot-applies — no restart, no re-registration.
 
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ENGINE_IDS, ENGINE_INFO } from './src/core/engines.js'
 import { EXTERNAL_WEB_CONTENT_NOTICE, formatProOutput } from './src/core/format.js'
 import { orchestrate } from './src/core/router.js'
 import { createRegistry } from './src/core/registry.js'
+import { applyKeys, envKeys, resolveKeys } from './src/core/secrets.js'
 import { clamp } from './src/core/util.js'
 
 export const name = 'dsh-websearch'
 
 export const inject = ['web', 'tools', 'systemPrompt']
 
+/** Settings namespace; the Plugins settings page card is keyed by it. */
+export const SETTINGS_NAMESPACE = 'dsh-websearch'
+
 const MAX_QUERIES = 5
 const DEFAULT_MAX_RESULTS = 8
 const HARD_MAX_RESULTS = 20
 const TOOL_TIMEOUT_MS = 60_000
+
+/** Plugin + settings schema. `keys` literals never reach the settings UI. */
+export const Config = z.object({
+  /** Engine ids to disable entirely (routing, explicit choice, fan-out). */
+  disable: z.array(z.string()).default([]),
+  /** Literal engine keys — prefer the credentials UI or env vars. */
+  keys: z.dict(z.string().role('secret')),
+})
 
 const GUIDE_TEXT = `## Web search guide (web_search_pro)
 
@@ -46,7 +69,7 @@ Engine selection:
 Engine-specific options go in \`extra\`. Results carry URLs — cite them as markdown links; use web_fetch to read full pages when snippets are not enough. The output ends with a telemetry line showing which engines actually answered.`
 
 /** Validate + normalize raw row config; throws loudly on bad shapes. */
-function validateConfig(raw) {
+function normalizeConfig(raw) {
   const config = raw ?? {}
   if (config.disable !== undefined && !Array.isArray(config.disable)) {
     throw new Error('[dsh-websearch] config.disable must be an array of engine ids')
@@ -54,7 +77,7 @@ function validateConfig(raw) {
   for (const id of config.disable ?? []) {
     if (!ENGINE_IDS.includes(id)) throw new Error(`[dsh-websearch] config.disable references unknown engine "${id}"`)
   }
-  if (config.keys !== undefined && (typeof config.keys !== 'object' || Array.isArray(config.keys))) {
+  if (config.keys !== undefined && (typeof config.keys !== 'object' || Array.isArray(config.keys) || Object.entries(config.keys).some(([, v]) => typeof v !== 'string'))) {
     throw new Error('[dsh-websearch] config.keys must be an object of engine id → key string')
   }
   return config
@@ -160,10 +183,52 @@ function presentProResult(args, result) {
 }
 
 export function apply(ctx, rawConfig) {
-  const config = validateConfig(rawConfig)
   const logger = ctx.logger('dsh-websearch')
-  const registry = createRegistry({ config, env: process.env, log: logger })
-  logger.info(`engines: ${registry.describe()}`)
+  let getConfig = () => normalizeConfig(rawConfig)
+
+  // Live key map: env-prefilled synchronously (so availability is correct on
+  // the very first search), then overlaid by the async credentials resolution.
+  const keys = Object.create(null)
+  applyKeys(keys, envKeys(process.env))
+  const registry = createRegistry({
+    keys,
+    env: process.env,
+    isDisabled: (id) => (getConfig().disable ?? []).includes(id),
+    log: logger,
+  })
+
+  const resolveCredential = (refName) => {
+    const credentials = ctx.get('credentials')
+    if (credentials === undefined) return undefined
+    return credentials.resolve(credentialRef(refName)).then((r) => r?.value).catch(() => undefined)
+  }
+
+  async function refreshKeys() {
+    const next = await resolveKeys({ config: getConfig(), env: process.env, resolveCredential })
+    applyKeys(keys, next)
+    logger.info(`engines: ${registry.describe()}`)
+  }
+
+  void refreshKeys()
+  // A key saved in the Web UI (or edited directly in .credentials.yaml — the
+  // file watcher hot-publishes) re-resolves immediately.
+  ctx.on('credentials/reference-updated', () => {
+    void refreshKeys()
+  })
+
+  // Settings section: composition config as base, ~/.dsh/settings.yaml user
+  // layer (and the Plugins card) on top; changes hot-apply — `disable` is
+  // read live and keys re-resolve on every change.
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, SETTINGS_NAMESPACE, Config, getConfig(), {
+      setSource: (source) => {
+        getConfig = () => normalizeConfig(source())
+      },
+      onChange: () => {
+        void refreshKeys()
+      },
+    })
+  })
 
   // 1) Aggregated provider behind the official web_search tool.
   ctx.web.registerSearchProvider({

@@ -18,17 +18,18 @@ function keyFromConfigFile() {
 }
 
 export function create({ keys }) {
-  const apiKey = keys.bailian ?? keyFromConfigFile()
+  const fileKey = keyFromConfigFile()
+  const currentKey = () => keys.bailian ?? fileKey
   return {
     id: 'bailian',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(currentKey()),
     async search(req, signal) {
       const body = {
         model: typeof req.extra?.model === 'string' ? req.extra.model : 'qwen-turbo',
         messages: [{ role: 'user', content: req.query }],
         enable_search: true,
       }
-      const data = await fetchJson('bailian', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal, timeoutMs: 30_000 })
+      const data = await fetchJson('bailian', ENDPOINT, { method: 'POST', headers: bearer(currentKey()), body, signal, timeoutMs: 30_000 })
       const content = data?.choices?.[0]?.message?.content
       if (data?.error !== undefined) {
         throw new BackendError('bailian', `HTTP error: ${data.error.message ?? 'unknown'}`)

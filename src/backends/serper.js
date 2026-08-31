@@ -17,10 +17,9 @@ function applySiteOperators(query, includeSites, excludeSites) {
 }
 
 export function create({ keys }) {
-  const apiKey = keys.serper
   return {
     id: 'serper',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.serper),
     async search(req, signal) {
       const news = req.topic === 'news'
       const body = {
@@ -32,7 +31,7 @@ export function create({ keys }) {
       }
       const data = await fetchJson('serper', `${BASE}/${news ? 'news' : 'search'}`, {
         method: 'POST',
-        headers: { 'x-api-key': apiKey },
+        headers: { 'x-api-key': keys.serper },
         body,
         signal,
       })

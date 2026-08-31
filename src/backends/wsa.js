@@ -9,10 +9,9 @@ const ENDPOINT = 'https://api.wsa.cloud.tencent.com/SearchPro'
 const CNT_STEPS = [10, 20, 30, 40, 50]
 
 export function create({ keys }) {
-  const apiKey = keys.wsa
   return {
     id: 'wsa',
-    available: () => Boolean(apiKey),
+    available: () => Boolean(keys.wsa),
     async search(req, signal) {
       const wanted = clamp(req.maxResults ?? 10, 1, 50)
       const cnt = CNT_STEPS.find((step) => step >= wanted) ?? 50
@@ -24,7 +23,7 @@ export function create({ keys }) {
         body.FromTime = range.from
         body.ToTime = range.to ?? Math.floor(Date.now() / 1000)
       }
-      const data = await fetchJson('wsa', ENDPOINT, { method: 'POST', headers: bearer(apiKey), body, signal })
+      const data = await fetchJson('wsa', ENDPOINT, { method: 'POST', headers: bearer(keys.wsa), body, signal })
       const response = data?.Response ?? {}
       if (response.Error !== undefined) {
         throw new BackendError('wsa', `HTTP error: ${JSON.stringify(response.Error)}`)

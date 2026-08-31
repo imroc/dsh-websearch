@@ -74,13 +74,12 @@ async function searchArxiv(req, signal) {
 }
 
 export function create({ keys }) {
-  // Optional Semantic Scholar key — the anonymous pool is heavily rate-limited.
-  const s2Key = keys.academic
   return {
     id: 'academic',
     available: () => true,
     async search(req, signal) {
-      return req.extra?.provider === 'arxiv' ? searchArxiv(req, signal) : searchS2(req, signal, s2Key)
+      // Optional Semantic Scholar key — the anonymous pool is heavily rate-limited.
+      return req.extra?.provider === 'arxiv' ? searchArxiv(req, signal) : searchS2(req, signal, keys.academic)
     },
   }
 }

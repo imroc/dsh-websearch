@@ -1,6 +1,8 @@
-// Backend registry: resolve keys (config literal > env var), apply disables,
-// instantiate every backend. A backend without its key stays registered but
-// reports available() === false and drops out of every routing chain.
+// Backend registry. `keys` is a LIVE map (engine → key) owned by the plugin:
+// backends read it at call time, so credential updates hot-apply without
+// rebuilding anything. `isDisabled` is likewise live, fed from the settings
+// section. A backend without its key stays registered but reports
+// available() === false and drops out of every routing chain.
 
 import * as academic from '../backends/academic.js'
 import * as anysearch from '../backends/anysearch.js'
@@ -18,7 +20,6 @@ import * as stack from '../backends/stack.js'
 import * as tavily from '../backends/tavily.js'
 import * as wsa from '../backends/wsa.js'
 import * as zhipu from '../backends/zhipu.js'
-import { ENGINE_INFO } from './engines.js'
 
 const FACTORIES = {
   brave: brave.create,
@@ -40,35 +41,36 @@ const FACTORIES = {
 }
 
 /**
- * @param {{disable?: string[], keys?: Object<string, string>, defaults?: object}} config
- * @param {Record<string, string|undefined>} env — usually process.env
+ * @param {object} options
+ * @param {Object<string,string|undefined>} options.keys - LIVE engine→key map.
+ * @param {Record<string,string|undefined>} [options.env] - usually process.env.
+ * @param {(id: string) => boolean} [options.isDisabled] - live disable check.
+ * @param {{warn?: (msg: string) => void}} [options.log]
  */
-export function createRegistry({ config = {}, env = process.env, log } = {}) {
-  const disabled = new Set(Array.isArray(config.disable) ? config.disable : [])
-  const keys = {}
-  for (const [id, info] of Object.entries(ENGINE_INFO)) {
-    const literal = config.keys?.[id]
-    keys[id] = typeof literal === 'string' && literal !== ''
-      ? literal
-      : (info.keyEnv !== undefined ? env[info.keyEnv] : undefined) || undefined
-  }
+export function createRegistry({ keys, env = process.env, isDisabled = () => false, log } = {}) {
   const map = new Map()
   for (const [id, factory] of Object.entries(FACTORIES)) {
-    if (disabled.has(id)) continue
     try {
-      const backend = factory({ keys, config, env })
+      const backend = factory({ keys, env })
       if (backend !== undefined && backend.id === id) map.set(id, backend)
     } catch (e) {
       log?.warn?.(`backend ${id} failed to initialize: ${e?.message ?? e}`)
     }
   }
   return {
-    /** @returns {undefined | {id: string, available(): boolean, search(object, AbortSignal): Promise<object>}} */
-    get: (id) => map.get(id),
-    ids: () => [...map.keys()],
-    list: () => [...map.values()],
-    hasUsable: () => [...map.values()].some((b) => b.available()),
+    /**
+     * The backend for `id`, or undefined when unknown or disabled.
+     * @returns {undefined | {id: string, available(): boolean, search(object, AbortSignal): Promise<object>}}
+     */
+    get: (id) => (isDisabled(id) ? undefined : map.get(id)),
+    /** Whether the engine exists at all (independent of disable state). */
+    knows: (id) => map.has(id),
+    ids: () => [...map.keys()].filter((id) => !isDisabled(id)),
+    list: () => [...map.values()].filter((b) => !isDisabled(b.id)),
+    hasUsable: () => [...map.values()].some((b) => !isDisabled(b.id) && b.available()),
     /** Human-readable availability summary for logs and diagnostics. */
-    describe: () => [...map.values()].map((b) => `${b.id}:${b.available() ? 'ok' : 'no-key'}`).join(' '),
+    describe: () => [...map.values()]
+      .map((b) => `${b.id}:${isDisabled(b.id) ? 'off' : b.available() ? 'ok' : 'no-key'}`)
+      .join(' '),
   }
 }

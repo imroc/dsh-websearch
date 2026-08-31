@@ -13,6 +13,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRegistry } from '../src/core/registry.js'
+import { envKeys } from '../src/core/secrets.js'
 
 function envFromDshWeb() {
   try {
@@ -49,7 +50,7 @@ const QUERIES = {
 }
 
 const env = { ...process.env, ...(await envFromDshWeb()) }
-const registry = createRegistry({ config: {}, env, log: console })
+const registry = createRegistry({ keys: envKeys(env), env, log: console })
 const filter = process.argv.slice(2)
 const engines = registry.list().filter((b) => filter.length === 0 || filter.includes(b.id))
 
