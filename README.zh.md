@@ -38,8 +38,10 @@ key 解析顺序：`config.keys.<id>`（字面量）→ credentials 服务（其
 
 ## 安装
 
+npm 包名为 `dsh-plugin-websearch`（更自然的 `dsh-websearch` / `dsh-websearch-plugin` 名字均因 npm 混淆名保护政策被无关的第三方包占用）：
+
 ```bash
-dsh plugin --profile web add dsh-websearch
+dsh plugin --profile web add dsh-plugin-websearch
 # 或直接从 GitHub 仓库安装：
 dsh plugin --profile web add github:imroc/dsh-websearch
 # 或本地目录：
@@ -49,7 +51,7 @@ dsh plugin --profile web add /path/to/dsh-websearch
 再把包名加进 profile 的 `package.json`（`dsh.profile.bundles` 数组）：
 
 ```json
-"dsh": { "profile": { "bundles": [ "...", "dsh-websearch" ] } }
+"dsh": { "profile": { "bundles": [ "...", "dsh-plugin-websearch" ] } }
 ```
 
 重启 DSH 生效。bundle patch 会挂载插件并把 `web.searchProvider` 钉到 `websearch`，内置 `web_search` 工具即走编排器。想撤销钉选（保留插件、换回其它 provider），在 `$DSH_HOME/cordis.patch.yml` 或 profile 的 patch 层再覆盖一次 `web` 行即可——后层生效。

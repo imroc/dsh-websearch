@@ -20,7 +20,7 @@
 // fails before registration with "loaded without registering ...".
 
 window.__ModuleLoader__.load({
-  id: 'dsh-websearch',
+  id: 'dsh-plugin-websearch',
   factory: (require) => {
     var module = { exports: {} }
     var exports = module.exports

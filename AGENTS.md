@@ -8,6 +8,10 @@ You are contributing to **dsh-websearch**, a [DeepSeek Harness](https://github.c
 
 16 engines are wired: brave, bocha, zhipu, wsa, bailian, exa, tavily, serper, bing, ddg, anysearch, firecrawl, stack, hn, academic (S2 + arXiv), gh. `docs/DESIGN.md` holds the design decisions, the engine matrix, and the parameter mapping — read it before changing routing or adapters.
 
+## Naming
+
+The **npm package is `dsh-plugin-websearch`**, not `dsh-websearch`: the natural names `dsh-websearch` and `dsh-websearch-plugin` are both blocked by npm's confusable-name policy (unrelated third-party packages `dsh-web-search` and `dsh-web-search-plugin` exist; the check ignores hyphens). Everything else keeps the `dsh-websearch` identity — repo name, plugin display name, settings namespace (and therefore `~/.dsh/settings.yaml` keys and saved credentials), card title, log prefixes. The package name appears in exactly four places that must stay in sync: `package.json` `name`, the `name:` of the inserted row in `cordis.patch.yml`, the ModuleLoader `id` in `client.js`, and the profile dependency/bundles entries.
+
 ## Layout
 
 ```
@@ -26,7 +30,7 @@ README.md / README.zh.md   bilingual user docs (EN is the source of truth; keep 
 ## Hard constraints — do not relax these
 
 1. **Target the INSTALLED DSH, not the master source.** The local harness checkout is master and the deployment runs an older release (0.1.1-rc.2 when this was written); **five silent API divergences have already shipped bugs here** (settings registration, exports map, credentials remote shape and location, client service names — see `docs/DESIGN.md` "结论演进"-style history and the dsh-expert knowledge base). Before relying on any `@deepseek-ai/*` API, verify it against the installed packages — on this machine under `/home/linuxbrew/.linuxbrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/<pkg>/lib/` — not against the checkout.
-2. **Client bundle contract:** `client.js` is served as a classic `<script>` and MUST register via `window.__ModuleLoader__.load({ id: 'dsh-websearch', factory: (require) => {...} })`. React comes from the injected `require('react')`; `import` statements are a syntax error in this context and previously broke the whole Web UI. No build step — the closure-factory form is hand-written on purpose.
+2. **Client bundle contract:** `client.js` is served as a classic `<script>` and MUST register via `window.__ModuleLoader__.load({ id: 'dsh-plugin-websearch', factory: (require) => {...} })` — the id is the loader entry name, which MUST equal the npm package name in `package.json` (the test derives it from there). React comes from the injected `require('react')`; `import` statements are a syntax error in this context and previously broke the whole Web UI. No build step — the closure-factory form is hand-written on purpose.
 3. **`package.json` `exports` must keep `"./package.json": "./package.json"`.** client-modules locates a bundle package via `require.resolve('<pkg>/package.json')`; without that subpath export the client half silently drops out of the boot graph (no error, no card).
 4. **Cross-version call sites are defensive on purpose.** Settings registration uses the plain `settings.register(ns, schema, { base })` + `scope.get()/watch()` API shared by both releases; the credentials remote is resolved as `ctx.get('remote.credentials') ?? ctx.get('connection')?.api?.credentials ?? ctx.remote?.credentials`, and describe/set probe both argument shapes. Do not "simplify" these to a single-release form.
 5. **Keys live in a mutable map read per call** (`src/core/secrets.js` + backends reading `keys.<engine>` live). Credential and settings changes hot-apply through `refreshKeys()` (triggered by `credentials/reference-updated` and the settings scope watch). Never snapshot keys into backends at creation time.
@@ -40,18 +44,18 @@ node scripts/smoke.mjs [engine…]  # one live query per backend; reads keys fro
                                  # running dsh-web process env when the shell scrubbed them
 ```
 
-The local deployment runs the **released npm version** (`~/.dsh/profiles/web` and `~/.dsh/profiles/dsh-tui`, both `^` ranges). To test uncommitted changes, temporarily point a profile at this checkout (a `file:` dependency — **`pnpm update` does NOT refresh it**; always remove + add):
+The local deployment runs the **released npm version** (`~/.dsh/profiles/web` and `~/.dsh/profiles/dsh-tui`, both `^` ranges of `dsh-plugin-websearch`). To test uncommitted changes, temporarily point a profile at this checkout (a `file:` dependency — **`pnpm update` does NOT refresh it**; always remove + add):
 
 ```bash
-cd ~/.dsh/profiles/web && pnpm remove dsh-websearch && pnpm add file:<this-repo-path>
+cd ~/.dsh/profiles/web && pnpm remove dsh-plugin-websearch && pnpm add file:<this-repo-path>
 ```
 
-After the change ships, publish and restore the registry dependency in both profiles:
+After the change ships, publish and restore the registry dependency in both profiles (or use `dsh plugin --profile <name> add dsh-plugin-websearch@^<version>`, which also reconciles the `bundles` array):
 
 ```bash
-npm publish                                   # from the repo root, after committing
-cd ~/.dsh/profiles/web && pnpm add dsh-websearch@^<version>
-cd ~/.dsh/profiles/dsh-tui && pnpm add dsh-websearch@^<version>
+npm publish                                        # from the repo root, after committing
+cd ~/.dsh/profiles/web && pnpm add dsh-plugin-websearch@^<version>
+cd ~/.dsh/profiles/dsh-tui && pnpm add dsh-plugin-websearch@^<version>
 ```
 
 - `client.js` changes: HMR picks them up (the boot graph `rev` changes — verify with `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`); the browser just needs a refresh.

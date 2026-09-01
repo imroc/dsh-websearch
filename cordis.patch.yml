@@ -1,6 +1,7 @@
-# dsh-websearch bundle patch.
+# dsh-plugin-websearch bundle patch.
 #
-# 1. Mount the plugin (id `websearch`, package `dsh-websearch`).
+# 1. Mount the plugin (id `websearch`, package `dsh-plugin-websearch` — the
+#    npm handle; the plugin identity stays `dsh-websearch`).
 # 2. Pin the `web` seam's search provider to the aggregated provider this
 #    plugin registers (provider id `websearch`), so the built-in `web_search`
 #    tool routes through the multi-engine orchestrator instead of a single
@@ -12,7 +13,7 @@
 # or the profile's cordis.patch.yml — later layers win.
 - insert:
     - id: websearch
-      name: dsh-websearch
+      name: dsh-plugin-websearch
 - id: web
   config:
     searchProvider: websearch

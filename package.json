@@ -1,5 +1,5 @@
 {
-  "name": "dsh-websearch",
+  "name": "dsh-plugin-websearch",
   "version": "0.2.4",
   "description": "Multi-engine web search for DeepSeek Harness: an aggregated ctx.web search provider (auto-routing + sequential fallback, free engines keep search alive) plus a web_search_pro model tool with per-query engine choice, fan-out, batch and verticals — Brave, Bocha, Zhipu, WSA, Bailian, Exa, Tavily, Serper, Bing, DuckDuckGo, AnySearch, Firecrawl, StackExchange, Hacker News, Semantic Scholar/arXiv, GitHub.",
   "keywords": [

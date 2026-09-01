@@ -26,7 +26,7 @@
 
 | # | 决策 | 结论 |
 |---|---|---|
-| 1 | 归宿 | 自用优先，按可开源标准写；npm 为主分发渠道（2026-09-01 发布 0.2.4，账号 imrocchan），GitHub 仓库与本地路径为备选安装源 |
+| 1 | 归宿 | 自用优先，按可开源标准写；npm 为主分发渠道（2026-09-01 发布 0.2.4，账号 imrocchan，包名 **dsh-plugin-websearch**——裸名 dsh-websearch 与 dsh-websearch-plugin 均被 npm 混淆名保护政策拒绝：已存在无关三方包 dsh-web-search / dsh-web-search-plugin，审查忽略连字符），GitHub 仓库与本地路径为备选安装源；插件内部身份（settings namespace、卡片标题、日志前缀）仍用 dsh-websearch |
 | 2 | 分层 | 全部收进插件：能力+策略都在工具描述与 prompt section 中 |
 | 3 | 成本 | 多后端可配置、免费优先；有 key 自动解锁付费后端 |
 | 4 | 范围 | 只做搜索：读页面归官方 `web_fetch`；deep-research/extract 编排由模型自行多步编排 |
@@ -35,7 +35,7 @@
 | 7 | 路由 | 自动路由（中文→bocha，其它→brave）+ 顺序降级链（尾部 AnySearch 匿名 + DDG 永远免费可用）；fan-out 仅显式要求 |
 | 8 | SearXNG | 不做，不预留 |
 | 9 | 旧技能 | 已移除（2026-08-31）：插件装进 web + dsh-tui 双 profile 后，skills 仓的 websearch 技能（16 渠道 bash 脚本）git rm 退役，reach 技能路由改指插件工具 |
-| 10 | 部署 | 动态插件原型验证接缝 → 静态包落 `~/.dsh/profiles/web` + `~/.dsh/profiles/dsh-tui`；稳定后两 profile 均切 npm 版本（`^` range），`file:` 仅开发期临时挂载 |
+| 10 | 部署 | 动态插件原型验证接缝 → 静态包落 `~/.dsh/profiles/web` + `~/.dsh/profiles/dsh-tui`；稳定后两 profile 均切 npm 版本 `dsh-plugin-websearch`（`^` range），`file:` 仅开发期临时挂载 |
 
 ## 2. 架构
 

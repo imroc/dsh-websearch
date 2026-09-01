@@ -6,12 +6,13 @@ import vm from 'node:vm'
 test('client bundle follows the DSH ModuleLoader contract', async () => {
   const registrations = []
   const source = await readFile(new URL('../client.js', import.meta.url), 'utf8')
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   vm.runInNewContext(source, {
     window: { __ModuleLoader__: { load: (registration) => registrations.push(registration) } },
   })
 
   assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].id, 'dsh-websearch')
+  assert.equal(registrations[0].id, pkg.name)
   assert.equal(typeof registrations[0].factory, 'function')
 
   const react = { createElement: () => null, useState: () => ['', () => {}] }

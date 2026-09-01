@@ -36,8 +36,10 @@ Keys resolve as `config.keys.<id>` (literal) → credentials service (which itse
 
 ## Install
 
+The npm package is `dsh-plugin-websearch` (the more natural `dsh-websearch` / `dsh-websearch-plugin` names are blocked by npm's confusable-name policy because of unrelated third-party packages):
+
 ```bash
-dsh plugin --profile web add dsh-websearch
+dsh plugin --profile web add dsh-plugin-websearch
 # or straight from the GitHub repository:
 dsh plugin --profile web add github:imroc/dsh-websearch
 # or from a local checkout:
@@ -47,7 +49,7 @@ dsh plugin --profile web add /path/to/dsh-websearch
 Then add the bundle to the profile's `package.json` (the `dsh.profile.bundles` array):
 
 ```json
-"dsh": { "profile": { "bundles": [ "...", "dsh-websearch" ] } }
+"dsh": { "profile": { "bundles": [ "...", "dsh-plugin-websearch" ] } }
 ```
 
 and restart DSH. The bundle patch mounts the plugin and pins `web.searchProvider: websearch`, so the built-in `web_search` tool routes through the orchestrator. To undo the pin (keep the plugin, restore another provider), override the `web` row again in `$DSH_HOME/cordis.patch.yml` or the profile's patch layer — later layers win.
