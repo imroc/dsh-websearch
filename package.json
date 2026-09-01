@@ -46,7 +46,10 @@
   "author": "roc <roc@imroc.cc> (https://imroc.cc)",
   "license": "MIT",
   "homepage": "https://github.com/imroc/dsh-websearch#readme",
-  "repository": "github:imroc/dsh-websearch",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imroc/dsh-websearch.git"
+  },
   "bugs": "https://github.com/imroc/dsh-websearch/issues",
   "dsh": {
     "bundle": {

@@ -37,6 +37,8 @@ Keys resolve as `config.keys.<id>` (literal) → credentials service (which itse
 ## Install
 
 ```bash
+dsh plugin --profile web add dsh-websearch
+# or straight from the GitHub repository:
 dsh plugin --profile web add github:imroc/dsh-websearch
 # or from a local checkout:
 dsh plugin --profile web add /path/to/dsh-websearch

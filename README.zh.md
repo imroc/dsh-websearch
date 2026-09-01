@@ -39,6 +39,8 @@ key 解析顺序：`config.keys.<id>`（字面量）→ credentials 服务（其
 ## 安装
 
 ```bash
+dsh plugin --profile web add dsh-websearch
+# 或直接从 GitHub 仓库安装：
 dsh plugin --profile web add github:imroc/dsh-websearch
 # 或本地目录：
 dsh plugin --profile web add /path/to/dsh-websearch

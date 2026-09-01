@@ -40,10 +40,18 @@ node scripts/smoke.mjs [engine…]  # one live query per backend; reads keys fro
                                  # running dsh-web process env when the shell scrubbed them
 ```
 
-Install on the local deployment (a `file:` dependency — **`pnpm update` does NOT refresh it**; always remove + add):
+The local deployment runs the **released npm version** (`~/.dsh/profiles/web` and `~/.dsh/profiles/dsh-tui`, both `^` ranges). To test uncommitted changes, temporarily point a profile at this checkout (a `file:` dependency — **`pnpm update` does NOT refresh it**; always remove + add):
 
 ```bash
 cd ~/.dsh/profiles/web && pnpm remove dsh-websearch && pnpm add file:<this-repo-path>
+```
+
+After the change ships, publish and restore the registry dependency in both profiles:
+
+```bash
+npm publish                                   # from the repo root, after committing
+cd ~/.dsh/profiles/web && pnpm add dsh-websearch@^<version>
+cd ~/.dsh/profiles/dsh-tui && pnpm add dsh-websearch@^<version>
 ```
 
 - `client.js` changes: HMR picks them up (the boot graph `rev` changes — verify with `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`); the browser just needs a refresh.
@@ -61,5 +69,5 @@ cd ~/.dsh/profiles/web && pnpm remove dsh-websearch && pnpm add file:<this-repo-
 
 - Plain ESM JavaScript, no build step, no runtime dependencies; `@deepseek-ai/*` stay optional peer dependencies resolved from the running harness (the plugin must be installed inside a DSH profile directory).
 - Commit messages: Chinese subject line, imperative (matching this repo's history).
-- Bump `version` in `package.json` on every change; the repo installs from GitHub, npm publishing is optional.
+- Bump `version` in `package.json` on every change; every release is published to npm (`npm publish` from the repo root — the committed source is the shipped artifact, no build step). The GitHub repo and local paths remain alternative install sources.
 - Never commit secrets: tests mock `fetch`, smoke queries are harmless, keys come from the environment.
