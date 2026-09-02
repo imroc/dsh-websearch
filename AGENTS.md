@@ -34,7 +34,7 @@ README.md / README.zh.md   bilingual user docs (EN is the source of truth; keep 
 3. **`package.json` `exports` must keep `"./package.json": "./package.json"`.** client-modules locates a bundle package via `require.resolve('<pkg>/package.json')`; without that subpath export the client half silently drops out of the boot graph (no error, no card).
 4. **Cross-version call sites are defensive on purpose.** Settings registration uses the plain `settings.register(ns, schema, { base })` + `scope.get()/watch()` API shared by both releases; the credentials remote is resolved as `ctx.get('remote.credentials') ?? ctx.get('connection')?.api?.credentials ?? ctx.remote?.credentials`, and describe/set probe both argument shapes. Do not "simplify" these to a single-release form.
 5. **Keys live in a mutable map read per call** (`src/core/secrets.js` + backends reading `keys.<engine>` live). Credential and settings changes hot-apply through `refreshKeys()` (triggered by `credentials/reference-updated` and the settings scope watch). Never snapshot keys into backends at creation time.
-6. **Docs move with the code.** A behavior or decision change updates `docs/DESIGN.md` and both READMEs in the same commit. DSH-generic conclusions (not plugin-specific) belong in the DSH knowledge base — on this machine `~/dev/dsh-expert/knowledge/` (see its AGENTS.md); record them as you discover them.
+6. **Docs move with the code.** A behavior or decision change updates `docs/DESIGN.md` and both READMEs in the same commit. DSH-generic conclusions (not plugin-specific) belong in the DSH knowledge base — on this machine `~/dev/agents/dsh-agent/knowledge/` (see its AGENTS.md); record them as you discover them.
 
 ## Development loop
 
