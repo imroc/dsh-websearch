@@ -18,7 +18,7 @@
 | 4 | credentials remote | 挂在 `ctx.get('connection').api.credentials`；`describe({refs}) → result.value.credentials`、`set({ref, value})` | 独立注入服务 `remote.credentials`；`describe(refs) → value`、`set(ref, value)` | 调用静默 TypeError：徽标恒默认值、保存无效 |
 | 5 | 客户端服务名 | inject 列表无 `remote.credentials`（注入它=永远等待） | 有 | 客户端插件永不激活 |
 
-**排障工具箱**：boot 图 `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`（rev 变化=HMR 生效）；宿主内部态用动态诊断插件读 `settings.describe()`/`clientModules.graph()` 并以 `throw` 带回结果；web seam pin 验证=注册一次性探针 provider 后调 `ctx.web.search`。完整排障过程见 dsh-expert 知识库（`knowledge/dev/20260906-自建dsh-websearch插件设计与实现.md`）。
+**排障工具箱**：boot 图 `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`（rev 变化=HMR 生效）；宿主内部态用动态诊断插件读 `settings.describe()`/`clientModules.graph()` 并以 `throw` 带回结果；web seam pin 验证=注册一次性探针 provider 后调 `ctx.web.search`。完整排障过程见 dsh-agent 知识库（`knowledge/dev/20260906-自建dsh-websearch插件设计与实现.md`）。
 
 ## 1. 目标与决策记录
 
