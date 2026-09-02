@@ -1,5 +1,7 @@
 # dsh-websearch
 
+English | [中文](README.zh.md)
+
 Multi-engine web search for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): one aggregated `ctx.web` search provider with automatic routing and fallback, plus a `web_search_pro` model tool that lets the agent pick engines on demand — fan out across engines, batch independent queries, and search verticals (StackOverflow, Hacker News, papers, GitHub).
 
 ## Why
