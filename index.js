@@ -221,10 +221,20 @@ export function apply(ctx, rawConfig) {
   // read live and keys re-resolve on every change.
   //
   // Uses the plain service API (register + scope.get/watch) shared by
-  // 0.1.1-rc.2 and master: the rc.2-only `installSettingsSection` helper and
+  // 0.1.1-rc.2 through 0.1.5: the rc.2-only `installSettingsSection` helper and
   // the master-only `settings.installSection` method are both thin wrappers
   // over exactly this call.
+  //
+  // 0.1.7 retires that pair as well: a plugin's settings are its own Loader
+  // entry config there, edited through the auto-generated form from this
+  // plugin's `Config` schema, and a change re-applies the row. Nothing to
+  // register, so the composition config stays the source and keys still
+  // resolve — `disable` is read live either way.
   ctx.inject(['settings'], (settingsCtx) => {
+    if (typeof settingsCtx.settings?.register !== 'function') {
+      void refreshKeys()
+      return
+    }
     const scope = settingsCtx.settings.register(SETTINGS_NAMESPACE, Config, { base: getConfig() })
     getConfig = () => normalizeConfig(scope.get())
     scope.watch(() => {
@@ -318,10 +328,14 @@ export function apply(ctx, rawConfig) {
     presentResult: presentProResult,
   }))
 
-  // 3) Per-agent prompt guide. agent/session-start can re-fire (clear,
+  // 3) Per-agent prompt guide. The lifecycle edge can re-fire (clear,
   //    compact); the WeakSet keeps one registration per agent object.
+  //
+  // 0.1.7 removed the emit-mode `agent/session-start` and moved the edge to the
+  // serial `agent/created` the first model request awaits, so both are
+  // subscribed and one build covers either harness; whichever fires first wins.
   const handled = new WeakSet()
-  ctx.on('agent/session-start', ({ agent }) => {
+  const registerGuide = ({ agent }) => {
     if (agent === undefined || handled.has(agent)) return
     handled.add(agent)
     try {
@@ -329,7 +343,11 @@ export function apply(ctx, rawConfig) {
     } catch (e) {
       logger.warn(`failed to register prompt guide: ${e?.message ?? e}`)
     }
-  })
+    // A serial `agent/created` listener is awaited; settle on undefined.
+    return undefined
+  }
+  ctx.on('agent/session-start', registerGuide)
+  ctx.on('agent/created', registerGuide)
 }
 
 export { EXTERNAL_WEB_CONTENT_NOTICE }

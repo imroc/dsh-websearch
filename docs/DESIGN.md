@@ -20,6 +20,17 @@
 
 **排障工具箱**：boot 图 `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`（rev 变化=HMR 生效）；宿主内部态用动态诊断插件读 `settings.describe()`/`clientModules.graph()` 并以 `throw` 带回结果；web seam pin 验证=注册一次性探针 provider 后调 `ctx.web.search`。完整排障过程见 dsh-agent 知识库（`knowledge/dev/20260906-自建dsh-websearch插件设计与实现.md`）。
 
+## 9. 0.1.7 迁移（0.2.5）
+
+| # | 差异点 | ≤0.1.5 | 0.1.7 | 处理 |
+|---|---|---|---|---|
+| 1 | agent 生命周期边 | `agent/session-start`（emit） | **已删除**，改为 serial 的 `agent/created`（首个模型请求 await 每个监听器） | 两个边都订阅、共用同一 handler，`handled` WeakSet 去重；handler 显式 `return undefined` |
+| 2 | settings 注册 | `settings.register(ns, schema, {base})` | **`register` 与 `installSection` 双双退役**：插件的设置就是它自己的 Loader 条目 config，由 `Config` schema 自动生成表单，改动重挂行 | 探测 `typeof settings?.register === 'function'`，不命中则跳过注册并 `refreshKeys()`；组合行 config 成为唯一来源 |
+| 3 | 设置卡片 | 客户端服务 `settingsScope` + `settings.plugin.item` 槽位 | 两者都删除（改为 `plugins.*` 一族 + form API） | **待办**：客户端半边在 0.1.7 不激活（`exports.inject` 里的 `settingsScope` 永不出现），卡片消失；provider / `web_search_pro` / 注入提示词不受影响，引擎 key 仍走 env 与 credentials |
+| 4 | client 共享包 | `dsh.client.inject` 含已停发的 `@deepseek-ai/dsh-client-runtime` | 该包不存在 | 从 inject 列表移除 |
+
+**结论**：0.1.7 上「搜索能力」完整（provider + 工具 + prompt 引导 + env/credentials 取 key），丢的是设置卡片；卡片重写要对着真实 0.1.7 UI 迭代。
+
 ## 1. 目标与决策记录
 
 把原 websearch 技能（16 渠道 bash 脚本）的能力收进一个 DSH 插件，实现「丰富的搜索后端 + AI 按需搜索」。
