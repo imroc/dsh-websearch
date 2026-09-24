@@ -22,7 +22,12 @@ test('client bundle follows the DSH ModuleLoader contract', async () => {
   })
 
   assert.equal(client.name, 'dsh-websearch-client')
-  assert.deepEqual(Array.from(client.inject), ['slots', 'remote', 'settingsScope'])
+  // No blocking settings inject: 0.1.7 retired `settingsScope`, and a pending
+  // client entry aborts the whole web boot sweep.
+  assert.deepEqual(Array.from(client.inject), ['slots', 'remote'])
+  for (const service of client.inject) {
+    assert.ok(['slots', 'remote'].includes(service), `unexpected blocking inject "${service}"`)
+  }
   assert.equal(typeof client.apply, 'function')
 })
 

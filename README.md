@@ -63,12 +63,12 @@ and restart DSH. The bundle patch mounts the plugin and pins `web.searchProvider
 **API keys** — three layers, first match wins:
 
 1. Literal keys in the plugin row config (`cordis.patch.yml`) — avoid, secrets in files.
-2. The **credentials service**: Settings → Plugins → **Web Search (dsh-websearch)** in the Web UI. Keys are written through the credentials domain into `~/.dsh/.credentials.yaml`, never echoed back, and hot-apply (no restart).
+2. The **credentials service**: Web UI → **Plugins → `dsh-plugin-websearch` → the `websearch` row → Configure** (0.1.7+; on 0.1.5 and older it is Settings → Plugins → **Web Search (dsh-websearch)**). Keys are written through the credentials domain into `~/.dsh/.credentials.yaml`, never echoed back, and hot-apply (no restart).
 3. Environment variables (`BRAVE_SEARCH_API_KEY`, `BOCHA_API_KEY`, `ZHIPU_API_KEY`, `WSAPI_KEY`, `DASHSCOPE_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY`, `FIRECRAWL_API_KEY`, optional `ANYSEARCH_API_KEY` / `S2_API_KEY` / `GITHUB_TOKEN`).
 
 > **Env shadows the UI store**: the credentials layering is `process environment > ~/.dsh/.credentials.yaml > .env`. If dsh-web inherits a key as a real environment variable, a value saved in the Web UI cannot take effect until that variable is removed from the service environment (the card marks such engines "env-provided" and disables the input).
 
-The Plugins card also carries per-engine enable/disable checkboxes for all 16 engines (keyless ones included) — the `disable` array of the `dsh-websearch` settings section, hot-applied. The same field can be edited in `~/.dsh/settings.yaml`:
+The Plugins card also carries per-engine enable/disable checkboxes for all 16 engines (keyless ones included) — the `disable` array of the `websearch` entry config (marked `.volatile()` on 0.1.7+, so an edit hot-applies without remounting; the settings page edits the same value). The field can also be set in the profile's `cordis.patch.yml` (on ≤0.1.5 it lives in `~/.dsh/settings.yaml` under `dsh-websearch`):
 
 ```yaml
 dsh-websearch:

@@ -63,12 +63,12 @@ dsh plugin --profile web add /path/to/dsh-websearch
 **API key** —— 三层解析，先到先得：
 
 1. 插件行 config 里的字面量 key（`cordis.patch.yml`）——不建议，密钥落配置文件。
-2. **credentials 服务**：Web UI 的 设置 → 插件 → **Web Search（dsh-websearch）** 卡片。密钥经 credentials 域写入 `~/.dsh/.credentials.yaml`，永不回显，保存即热生效（无需重启）。
+2. **credentials 服务**：Web UI 的**插件页 → `dsh-plugin-websearch` → `websearch` 行 → 配置**（0.1.7 起；0.1.5 及更早为 设置 → 插件 → **Web Search（dsh-websearch）**）。密钥经 credentials 域写入 `~/.dsh/.credentials.yaml`，永不回显，保存即热生效（无需重启）。
 3. 环境变量（`BRAVE_SEARCH_API_KEY`、`BOCHA_API_KEY`、`ZHIPU_API_KEY`、`WSAPI_KEY`、`DASHSCOPE_API_KEY`、`EXA_API_KEY`、`TAVILY_API_KEY`、`SERPER_API_KEY`、`FIRECRAWL_API_KEY`，可选 `ANYSEARCH_API_KEY` / `S2_API_KEY` / `GITHUB_TOKEN`）。
 
 > **env 会遮蔽 UI 存储**：credentials 层叠为 `进程环境变量 > ~/.dsh/.credentials.yaml > .env`。若 dsh-web 进程继承了这个 key 的环境变量，UI 里保存的值不会生效，直到该变量从服务环境中移除（卡片会把这类引擎标为「env 提供」并禁用输入框）。
 
-插件卡片还提供每引擎的启用/禁用复选框（16 个引擎全有，含免 key 引擎）——即 `dsh-websearch` settings section 的 `disable` 数组，热生效。同样的字段也可以直接编辑 `~/.dsh/settings.yaml`：
+插件卡片还提供每引擎的启用/禁用复选框（16 个引擎全有，含免 key 引擎）——即 `websearch` 条目 config 的 `disable` 数组（0.1.7 起标了 `.volatile()`，改完热生效不重挂；设置页里的同名字段与卡片写的是同一份值）。同样的字段也可以直接编辑 profile 的 `cordis.patch.yml`（≤0.1.5 走 `~/.dsh/settings.yaml` 的 `dsh-websearch` 段）：
 
 ```yaml
 dsh-websearch:

@@ -1,6 +1,8 @@
 # dsh-websearch — 设计定稿
 
-日期：2026-09-06 · 状态：v0.2.4 · 适用：DSH 0.1.1-rc.2 装机实测（源码 master `0a53fb5` 仅作对照，API 有差异见 §8）
+日期：2026-09-06 · 状态：v0.2.6 · 适用：DSH 0.1.7-rc.1 装机实测（0.1.1-rc.2 ~ 0.1.5 轨道见 §8 与 §9 的双轨写法）
+
+> **v0.2.6 增量（客户端卡片 0.1.7 迁移，2026-09-24）**：设置卡片的取值服务与座位两条都随 0.1.7 换代（`settingsScope`→`configForms`、`settings.plugin.item`→`plugins.row.config`），**同时把 `settingsScope` 从 `exports.inject` 里摘掉**——0.1.7 升级当天 UI 全挂的根因就是它：客户端 entry pending 会让 web boot 的 `assertEntriesActive` 抛错，`mountClient` 不执行、**整个 Web UI 不挂载**（不只是少一张卡片）。另按 0.1.7 新规把 `disable` 标 `.volatile()`（设置投影只保留 volatile 字段；schemastery 3.18.4+ 才有该方法，故探测后条件调用），宿主侧改为每次读解包 `{get()}` 活引用。详见 §9。
 
 > **v0.2.4 增量（2026-08-31 全量验证 + 评审修复）**：全量实测发现两处**上游 API 漂移**并修复其影响——① zhipu 响应的 `link` 字段对时效/新闻类查询全空（技术类查询正常，实测对照；router 过滤后恒 0 条）→ adapter 在全部条目无 link 时 throw 触发降级 + count 客户端截断（API 忽略 count，3 要 47 回）；② brave News 端点 `results` 在顶层无 `news` 包装（官方 API Reference 确认）→ 解析改 `data?.results`。评审修复：arXiv 多词查询加引号（不加引号被 OR 展开，60 万条无关命中）、Google tbs 日期区间改 `cdr:1,cd_min:…,cd_max:…`（`qdr:c:from..to` 是非法词汇被静默忽略）、bing/ddg 格式异常从静默空结果改为 BackendError、ddg snippet 按邻近配对（原按序号配对会错位）+ 属性顺序无关解析、exa findSimilar 补 freshness/sites、http.js 超时可重试 + 外部 abort 不重试不包装、fanOutQuery 取消传播、stack 删除 `truncated` 挪用（配额告警污染合并结果）、arXiv `extra.year` 实现（submittedDate 区间，与 S2 同为起始年语义）、bing mkt 区域映射表 + ddg kl 全形态、gh 补 `keyEnv`（卡片可管理 token）+ 匿名 code search 提前报错、卡片补 4 个免 key 引擎开关 + toggleEngine 容错 + ENGINES 表与 engines.js 一致性单测。66 单测全绿。
 
@@ -20,16 +22,19 @@
 
 **排障工具箱**：boot 图 `curl -s http://127.0.0.1:3080/ | grep dsh-websearch`（rev 变化=HMR 生效）；宿主内部态用动态诊断插件读 `settings.describe()`/`clientModules.graph()` 并以 `throw` 带回结果；web seam pin 验证=注册一次性探针 provider 后调 `ctx.web.search`。完整排障过程见 dsh-agent 知识库（`knowledge/dev/20260906-自建dsh-websearch插件设计与实现.md`）。
 
-## 9. 0.1.7 迁移（0.2.5）
+## 9. 0.1.7 迁移（0.2.5 宿主侧 → 0.2.6 客户端卡片）
 
 | # | 差异点 | ≤0.1.5 | 0.1.7 | 处理 |
 |---|---|---|---|---|
 | 1 | agent 生命周期边 | `agent/session-start`（emit） | **已删除**，改为 serial 的 `agent/created`（首个模型请求 await 每个监听器） | 两个边都订阅、共用同一 handler，`handled` WeakSet 去重；handler 显式 `return undefined` |
 | 2 | settings 注册 | `settings.register(ns, schema, {base})` | **`register` 与 `installSection` 双双退役**：插件的设置就是它自己的 Loader 条目 config，由 `Config` schema 自动生成表单，改动重挂行 | 探测 `typeof settings?.register === 'function'`，不命中则跳过注册并 `refreshKeys()`；组合行 config 成为唯一来源 |
-| 3 | 设置卡片 | 客户端服务 `settingsScope` + `settings.plugin.item` 槽位 | 两者都删除（改为 `plugins.*` 一族 + form API） | **待办**：客户端半边在 0.1.7 不激活（`exports.inject` 里的 `settingsScope` 永不出现），卡片消失；provider / `web_search_pro` / 注入提示词不受影响，引擎 key 仍走 env 与 credentials |
-| 4 | client 共享包 | `dsh.client.inject` 含已停发的 `@deepseek-ai/dsh-client-runtime` | 该包不存在 | 从 inject 列表移除 |
+| 3 | 设置卡片取值 | 客户端服务 `settingsScope`（`bind({namespace})`） | 该服务**已删除**，改为 `ctx.configForms.get(<行 id>)`（命名空间 = profile 条目 id，本插件为 `websearch`）；`whileServed([...])` 在宿主服务该命名空间期间挂载 | 运行时探测两个服务，统一按 `getSnapshot()/subscribe()/set(field, value)` 的公共面使用；`exports.inject` 里**两个都不放**（原因见第 5 行） |
+| 4 | 卡片座位 | `settings.plugin.item`（key=namespace） | 该槽**已删除**，改为 `plugins.row.config`（key=`<bundle 包名>#<行 id>` = `dsh-plugin-websearch#websearch`），渲染在「插件页 → 该 bundle → 行 → 配置」 | 两个座位各自 `slots.inject` 注册：`slots.inject` 等槽位声明，宿主不声明的那个永不触发（惰性、无副作用），故一次发布同时覆盖两条宿主轨道 |
+| 5 | **阻塞式 inject 的爆炸半径** | — | **客户端 entry pending 会让 `assertEntriesActive` 抛错，整个 web boot 中止：`mountClient` 不执行，UI 完全不挂载**（页面停在 "Failed to load plugins / web boot: N entries did not activate"） | 只有「每条支持轨道都提供的服务」才写进 `exports.inject`（本插件只留 `slots`、`remote`）；跨版本服务一律运行时探测。**这条是 0.1.7 升级当天 UI 全挂的根因** |
+| 6 | 设置字段可编辑性 | settings section 全字段可写 | **设置投影只保留 volatile 字段**（`SettingsForms.describe` 内部走 `volatileForm`），且 volatile 字段以 `{get()}` 活引用交给插件、改动不重挂 | `disable` 标 `.volatile()`（schemastery **3.18.4+** 才有该方法，0.1.5 线的 3.18.2 没有 → 用 `typeof z.string().volatile === 'function'` 探测后条件调用）；宿主侧 `normalizeConfig` 每次读都解包 `liveValue()`，否则 volatile 引用会被当成数组校验直接抛错 |
+| 7 | client 共享包 | `dsh.client.inject` 含已停发的 `@deepseek-ai/dsh-client-runtime` | 该包不存在 | 从 inject 列表移除 |
 
-**结论**：0.1.7 上「搜索能力」完整（provider + 工具 + prompt 引导 + env/credentials 取 key），丢的是设置卡片；卡片重写要对着真实 0.1.7 UI 迭代。
+**结论**：0.1.7 上搜索能力与设置卡片均已完整（provider + 工具 + prompt 引导 + env/credentials 取 key + 行配置卡片）；0.2.6 起同一份代码在 ≤0.1.5 与 0.1.7 两条轨道上都能激活。
 
 ## 1. 目标与决策记录
 

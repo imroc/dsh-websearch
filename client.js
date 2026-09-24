@@ -1,4 +1,13 @@
-// Browser half of dsh-websearch: the plugin's card in Settings → Plugins.
+// Browser half of dsh-websearch: the plugin's configuration card.
+//
+// Where the card lives depends on the release:
+//   0.1.7+  Plugins page → the `dsh-plugin-websearch` package → the `websearch`
+//           row → Configure (`plugins.row.config`, keyed `<package>#<row id>`);
+//           the settings namespace is that row id.
+//   ≤ 0.1.5 Settings → Plugins (`settings.plugin.item`, keyed by the
+//           `dsh-websearch` section the host half registers).
+// The card registers into both seats; each waits for its slot to be declared,
+// so the unknown one stays inert.
 //
 // The card does two jobs, mirroring the official web-search card:
 //   1. Per-engine credential fields — written through the credentials domain
@@ -29,12 +38,27 @@ window.__ModuleLoader__.load({
 
     exports.name = 'dsh-websearch-client'
 
-// Service names that exist in BOTH 0.1.1-rc.2 and master. Note
-// `remote.credentials` is its own injectable service only on master; on rc.2
-// it is a plain sub-object of `remote` — resolved defensively in apply().
-    exports.inject = ['slots', 'remote', 'settingsScope']
+// Only services EVERY supported release serves belong here: a blocking inject
+// of a service the host does not serve leaves the whole entry pending, and one
+// pending entry aborts the entire web boot sweep (the UI never mounts — seen
+// on 0.1.7, which retires `settingsScope` in favour of `configForms`). Both
+// settings services, and `remote.credentials` (its own injectable service only
+// on master; a plain sub-object of `remote` on rc.2), are resolved defensively
+// in apply() instead.
+    exports.inject = ['slots', 'remote']
 
+/** Settings namespace on releases whose host half registers one (≤ 0.1.5). */
 const NS = 'dsh-websearch'
+/** Settings namespace on 0.1.7+: the profile entry (row) id from cordis.patch.yml. */
+const ROW_ID = 'websearch'
+/** Namespaces the card accepts, newest first — whichever the host serves. */
+const NAMESPACES = [ROW_ID, NS]
+/** `plugins.row.config` key on 0.1.7+: `<bundle package name>#<row id>`. */
+const ROW_CONFIG_KEY = 'dsh-plugin-websearch#websearch'
+/** Settings slot of ≤ 0.1.5 (keyed by namespace); gone on 0.1.7. */
+const LEGACY_SLOT = 'settings.plugin.item'
+/** Plugins-page row slot of 0.1.7+, declared by @deepseek-ai/dsh-client-ui-plugin-manager. */
+const ROW_SLOT = 'plugins.row.config'
 
 // Browser-safe copy of the engine table (a client package must not depend on
 // a Host package). `optional` engines work without a key; `keyless` engines
@@ -78,7 +102,26 @@ function createStore(initial) {
 }
 
     function apply(ctx) {
-  const scope = ctx.settingsScope.bind({ namespace: NS })
+  // Live settings source, adopted from whichever service the host serves:
+  // 0.1.7+ `configForms` (namespaced by the profile row id, registered through
+  // `whileServed`) or ≤ 0.1.5 `settingsScope` (bound to the registered
+  // namespace). Both expose `getSnapshot()/subscribe()/set(field, value)`, so
+  // the card is written against that shared surface. Null until one arrives.
+  /** @type {null | { getSnapshot: () => any, subscribe: (fn: () => void) => (() => void), set: (field: string, value: unknown) => unknown }} */
+  let settings = null
+  let detachSettings = null
+
+  function adoptSettings(next) {
+    detachSettings?.()
+    detachSettings = null
+    settings = next ?? null
+    if (settings !== null) {
+      const unsubscribe = settings.subscribe(projectSettings)
+      detachSettings = () => { unsubscribe?.() }
+    }
+    projectSettings()
+  }
+
   // The credentials remote API lives in a different place per release:
   //   master:     injectable service 'remote.credentials' — describe(refs) → {ok, value}
   //   0.1.1-rc.2: ctx.get('connection').api.credentials — describe({refs}) → {result: {ok, value: {credentials}}}
@@ -96,13 +139,18 @@ function createStore(initial) {
     settingsWritable: false,
   })
 
-  function projectScope() {
-    const snap = scope.getSnapshot()
+  function projectSettings() {
+    if (settings === null) {
+      const prev = store.getSnapshot()
+      store.set({ ...prev, disable: [], settingsStatus: 'unavailable', settingsWritable: false })
+      return
+    }
+    const snap = settings.getSnapshot() ?? {}
     const prev = store.getSnapshot()
     store.set({
       ...prev,
       disable: Array.isArray(snap.value?.disable) ? snap.value.disable : [],
-      settingsStatus: snap.status,
+      settingsStatus: snap.status ?? 'loading',
       settingsWritable: snap.writable === true && snap.status === 'ready',
     })
   }
@@ -161,8 +209,30 @@ function createStore(initial) {
     })
   }
 
-  scope.subscribe(projectScope)
-  projectScope()
+  // 0.1.7+: the settings service projects each profile entry's Config, and the
+  // namespace is that entry's id — discovered from the served set so a row id
+  // override still resolves (`whileServed` registers only while the host
+  // serves one of the candidates).
+  ctx.inject(['configForms'], (settingsCtx) => {
+    const forms = settingsCtx.configForms
+    settingsCtx.effect(() => forms.whileServed(NAMESPACES, (served) => {
+      const namespace = NAMESPACES.find((candidate) => served.has(candidate))
+      if (namespace === undefined) return () => {}
+      adoptSettings(forms.get(namespace))
+      return () => { adoptSettings(null) }
+    }), 'dsh-websearch: settings form')
+  })
+
+  // ≤ 0.1.5: the host half registers a settings section and the scope is bound
+  // to that namespace.
+  ctx.inject(['settingsScope'], (settingsCtx) => {
+    const legacy = settingsCtx.get('webUiSettings') ?? settingsCtx.settingsScope
+    if (typeof legacy?.bind !== 'function') return
+    adoptSettings(legacy.bind({ namespace: NS }))
+    settingsCtx.effect(() => () => { adoptSettings(null) }, 'dsh-websearch: legacy settings scope')
+  })
+
+  projectSettings()
   void readCredentials()
   // A key written on another surface (or an external .credentials.yaml edit —
   // the file watcher hot-publishes) refreshes the badges.
@@ -176,12 +246,13 @@ function createStore(initial) {
   }
 
   async function toggleEngine(id) {
-    const snap = scope.getSnapshot()
-    if (snap.writable !== true) return
+    if (settings === null) return
+    const snap = settings.getSnapshot() ?? {}
+    if (snap.writable !== true || snap.status !== 'ready') return
     const current = Array.isArray(snap.value?.disable) ? snap.value.disable : []
     const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
     try {
-      await scope.set('disable', next)
+      await settings.set('disable', next)
     } catch (e) {
       // Same rule as the key save path: never let a failed write become an
       // unhandled rejection the user only sees as "nothing happened".
@@ -189,10 +260,21 @@ function createStore(initial) {
     }
   }
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
+  // Card seats, one per release: 0.1.7+ renders a bundle row's configuration
+  // from `plugins.row.config` (keyed `<package>#<row id>`), ≤ 0.1.5 from the
+  // settings page's `settings.plugin.item` (keyed by namespace). `slots.inject`
+  // waits for a declaration and never fires for a slot the host does not
+  // declare, so registering both is inert where one is unknown.
+  const cardInject = () => ({ hooks: { dshWebsearch: store }, setKey, toggleEngine })
+  ctx.slots.inject(ROW_SLOT, () => ctx.slots.register({
+    name: ROW_SLOT,
+    key: ROW_CONFIG_KEY,
+    inject: cardInject,
+  }, WebsearchCard))
+  ctx.slots.inject(LEGACY_SLOT, () => ctx.slots.register({
+    name: LEGACY_SLOT,
     key: NS,
-    inject: () => ({ hooks: { dshWebsearch: store }, setKey, toggleEngine }),
+    inject: cardInject,
   }, WebsearchCard))
 }
 
@@ -283,6 +365,12 @@ function EngineRow({ engine, disabled, canToggle, onToggle, onSetKey }) {
 
 function WebsearchCard(props) {
   const state = props.useDshWebsearch((s) => s)
+  // The Plugins page asks for a one-liner first and the form only once the
+  // row's configuration page is open (0.1.7+); the ≤ 0.1.5 settings page
+  // renders the card straight away and passes no `view`.
+  if (props.view === 'summary') {
+    return '多引擎搜索：引擎凭据（credentials，不进设置文档）+ 各引擎启停。'
+  }
   const canToggle = state.settingsWritable
   return h('li', { style: cardStyle },
     h('div', { style: titleStyle }, 'Web Search（dsh-websearch）'),

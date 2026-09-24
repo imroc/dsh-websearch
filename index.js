@@ -46,10 +46,20 @@ const DEFAULT_MAX_RESULTS = 8
 const HARD_MAX_RESULTS = 20
 const TOOL_TIMEOUT_MS = 60_000
 
+// `Schema#volatile()` arrives with schemastery 3.18.4 (the harness 0.1.7 line);
+// calling it on an older host throws while this module loads, so the chain is
+// applied only where the API exists. On 0.1.7+ a volatile field is what the
+// settings page projects (`SettingsForms.describe` keeps nothing else), and the
+// host hands the plugin a live `Volatile<T>` reference instead of a value —
+// which is why `normalizeConfig` unwraps it on every read.
+const VOLATILE_SUPPORTED = typeof z.string().volatile === 'function'
+/** Mark a field editable in place (settings page) where the host supports it. */
+const volatileField = (schema) => (VOLATILE_SUPPORTED ? schema.volatile() : schema)
+
 /** Plugin + settings schema. `keys` literals never reach the settings UI. */
 export const Config = z.object({
   /** Engine ids to disable entirely (routing, explicit choice, fan-out). */
-  disable: z.array(z.string()).default([]),
+  disable: volatileField(z.array(z.string()).default([])),
   /** Literal engine keys — prefer the credentials UI or env vars. */
   keys: z.dict(z.string().role('secret')),
 })
@@ -68,9 +78,19 @@ Engine selection:
 
 Engine-specific options go in \`extra\`. Results carry URLs — cite them as markdown links; use web_fetch to read full pages when snippets are not enough. The output ends with a telemetry line showing which engines actually answered.`
 
+/** Unwrap a volatile config reference; plain values pass through. */
+function liveValue(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && typeof value.get === 'function'
+    ? value.get()
+    : value
+}
+
 /** Validate + normalize raw row config; throws loudly on bad shapes. */
 function normalizeConfig(raw) {
-  const config = raw ?? {}
+  const source = raw ?? {}
+  // Volatile fields arrive as stable `{ get() }` references on 0.1.7+; reading
+  // through on every call is what makes a settings-page edit hot-apply.
+  const config = { ...source, disable: liveValue(source.disable), keys: liveValue(source.keys) }
   if (config.disable !== undefined && !Array.isArray(config.disable)) {
     throw new Error('[dsh-websearch] config.disable must be an array of engine ids')
   }
